@@ -1,178 +1,882 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin — Vequence</title>
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-<header id="site-header"></header>
-<main class="shell" style="padding-top:38px;padding-bottom:60px;">
-  <div class="admin-heading">
+<link rel="stylesheet" href="styles.css"><style>
+  /* =========================================================
+     Admin Console — scalable UI
+     ========================================================= */
+
+  .admin-page {
+    padding-top: 32px;
+    padding-bottom: 70px;
+  }
+
+  .admin-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+
+  .admin-heading-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .admin-stats {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+
+  .admin-stat {
+    min-width: 0;
+    padding: 14px 15px;
+    border: 1px solid rgba(127,127,127,.18);
+    border-radius: 12px;
+    background: rgba(127,127,127,.045);
+  }
+
+  .admin-stat strong {
+    display: block;
+    font-size: 1.25rem;
+    line-height: 1.1;
+  }
+
+  .admin-stat span {
+    display: block;
+    margin-top: 5px;
+    opacity: .68;
+    font-size: .78rem;
+  }
+
+  .admin-section {
+    margin-top: 18px;
+  }
+
+  .admin-card {
+    border: 1px solid rgba(127,127,127,.18);
+    border-radius: 14px;
+    background: rgba(127,127,127,.025);
+    overflow: hidden;
+  }
+
+  .admin-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid rgba(127,127,127,.14);
+  }
+
+  .admin-card-head h2 {
+    margin: 0;
+  }
+
+  .admin-card-head p {
+    margin: 5px 0 0;
+    opacity: .68;
+    font-size: .88rem;
+  }
+
+  .admin-card-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .admin-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto auto auto;
+    gap: 8px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(127,127,127,.12);
+  }
+
+  .admin-toolbar input,
+  .admin-toolbar select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-toolbar .btn {
+    white-space: nowrap;
+  }
+
+  .admin-meta-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 18px;
+    font-size: .8rem;
+    opacity: .72;
+    border-bottom: 1px solid rgba(127,127,127,.10);
+  }
+
+  .admin-meta-left,
+  .admin-meta-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .admin-list {
+    min-height: 80px;
+  }
+
+  .admin-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 15px 18px;
+    border-bottom: 1px solid rgba(127,127,127,.10);
+  }
+
+  .admin-row:last-child {
+    border-bottom: 0;
+  }
+
+  .admin-row-main {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .admin-row-title {
+    margin: 3px 0 0;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: .72rem;
+    opacity: .62;
+    letter-spacing: .02em;
+  }
+
+  .admin-meta-text {
+    margin-top: 5px;
+    font-size: .78rem;
+    line-height: 1.45;
+    opacity: .68;
+  }
+
+  .admin-comment {
+    margin-top: 7px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+  }
+
+  .admin-subline {
+    margin-top: 5px;
+    font-size: .76rem;
+    opacity: .58;
+  }
+
+  .admin-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .admin-badge,
+  .ban-badge,
+  .status-badge,
+  .reply-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border-radius: 999px;
+    font-size: .64rem;
+    font-weight: 750;
+    letter-spacing: .04em;
+    vertical-align: middle;
+  }
+
+  .admin-badge {
+    background: rgba(70,150,255,.13);
+  }
+
+  .ban-badge {
+    background: rgba(220,70,70,.13);
+  }
+
+  .reply-badge {
+    background: rgba(140,100,220,.13);
+  }
+
+  .status-badge {
+    background: rgba(120,120,120,.11);
+  }
+
+  .admin-empty,
+  .admin-error,
+  .admin-loading {
+    padding: 28px 18px;
+    text-align: center;
+    opacity: .68;
+  }
+
+  .admin-error {
+    opacity: 1;
+  }
+
+  .admin-error strong {
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  .admin-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px;
+    border-top: 1px solid rgba(127,127,127,.12);
+  }
+
+  .admin-pagination-left,
+  .admin-pagination-right {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+
+  .admin-page-info {
+    min-width: 120px;
+    text-align: center;
+    font-size: .78rem;
+    opacity: .68;
+  }
+
+  .admin-page-number {
+    font-size: .74rem;
+    min-width: 34px;
+  }
+
+  .admin-page-number.is-active {
+    pointer-events: none;
+    font-weight: 700;
+  }
+
+  .admin-section-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 18px;
+    border-bottom: 1px solid rgba(127,127,127,.10);
+  }
+
+  .admin-section-toolbar-left,
+  .admin-section-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .admin-kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: .7rem;
+    padding: 2px 5px;
+    border: 1px solid rgba(127,127,127,.2);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    opacity: .7;
+  }
+
+  .admin-danger-zone {
+    margin-top: 18px;
+  }
+
+  .admin-ban-reason {
+    margin-top: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(220,70,70,.07);
+    font-size: .78rem;
+  }
+
+  .admin-toast-space {
+    min-height: 1px;
+  }
+
+  button[disabled],
+  a[aria-disabled="true"] {
+    opacity: .52;
+    pointer-events: none;
+  }
+
+  @media (max-width: 1100px) {
+    .admin-stats {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 800px) {
+    .admin-heading {
+      flex-direction: column;
+    }
+
+    .admin-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-toolbar {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .admin-toolbar > input {
+      grid-column: 1 / -1;
+    }
+
+    .admin-row {
+      flex-direction: column;
+    }
+
+    .admin-actions {
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    .admin-pagination {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .admin-pagination-left,
+    .admin-pagination-right {
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .admin-page {
+      padding-top: 20px;
+    }
+
+    .admin-card-head,
+    .admin-row,
+    .admin-toolbar,
+    .admin-meta-bar,
+    .admin-pagination,
+    .admin-section-toolbar {
+      padding-left: 13px;
+      padding-right: 13px;
+    }
+
+    .admin-toolbar {
+      grid-template-columns: 1fr;
+    }
+
+    .admin-stats {
+      gap: 7px;
+    }
+
+    .admin-stat {
+      padding: 11px;
+    }
+
+    .admin-heading-actions {
+      width: 100%;
+    }
+
+    .admin-heading-actions .btn {
+      flex: 1;
+    }
+  }
+</style></head><body>
+<header id="site-header"></header><main class="shell admin-page">  <div class="admin-heading">
     <div>
       <div class="kicker">Administration</div>
       <h1 class="page-title">Moderation console</h1>
-      <p class="page-sub">Manage articles, users and comments. Every action is verified by Supabase.</p>
-    </div>
+      <p class="page-sub">
+        Manage articles, users and comments. Every action is verified by Supabase.
+      </p>
+    </div><div class="admin-heading-actions">
+  <button class="btn btn-quiet btn-sm" id="refresh-all-btn" type="button">
+    Refresh all
+  </button>
+</div>
+
+  </div>  <section class="admin-stats" id="admin-stats" aria-live="polite"></section>  <!-- =======================================================
+       ARTICLES
+       ======================================================= -->  <section class="admin-section admin-card" id="articles-section"><div class="admin-card-head">
+  <div>
+    <h2>Articles</h2>
+    <p>Search by Article ID, title, slug or author.</p>
+  </div>
+</div>
+
+<div class="admin-toolbar">
+  <input
+    id="article-search"
+    type="search"
+    autocomplete="off"
+    placeholder="ART-XXXXXXXXXX, title, slug or author…"
+  >
+
+  <select id="article-status" aria-label="Article status">
+    <option value="">All statuses</option>
+    <option value="published">Published</option>
+    <option value="draft">Draft</option>
+  </select>
+
+  <button class="btn btn-primary btn-sm" id="article-search-btn" type="button">
+    Search
+  </button>
+
+  <button class="btn btn-quiet btn-sm" id="article-clear-btn" type="button">
+    Clear
+  </button>
+</div>
+
+<div class="admin-meta-bar">
+  <div class="admin-meta-left">
+    <span id="articles-summary">No results loaded.</span>
   </div>
 
-  <section class="admin-stats" id="admin-stats"></section>
+  <div class="admin-meta-right">
+    <label>
+      Rows
+      <select id="article-page-size" aria-label="Articles per page">
+        <option value="25">25</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+      </select>
+    </label>
+  </div>
+</div>
 
-  <div class="admin-grid">
-    <section class="admin-card">
-      <div class="admin-card-head"><div><h2>Articles</h2><p>Find by Article ID, title, slug or author.</p></div></div>
-      <div class="admin-toolbar">
-        <input id="article-search" placeholder="ART-XXXXXXXXXX or title…">
-        <select id="article-status"><option value="">All statuses</option><option value="published">Published</option><option value="draft">Draft</option></select>
-        <button class="btn btn-primary btn-sm" id="article-search-btn">Search</button>
-      </div>
-      <div id="articles-list"></div>
-    </section>
+<div id="articles-list" class="admin-list" aria-live="polite"></div>
+<div id="articles-pagination"></div>
 
-    <section class="admin-card">
-      <div class="admin-card-head"><div><h2>Users</h2><p>Promote moderators or ban accounts.</p></div></div>
-      <div class="admin-toolbar">
-        <input id="user-search" placeholder="Username or display name…">
-        <button class="btn btn-primary btn-sm" id="user-search-btn">Search</button>
-      </div>
-      <div id="users-list"></div>
-    </section>
+  </section>  <!-- =======================================================
+       USERS
+       ======================================================= -->  <section class="admin-section admin-card" id="users-section"><div class="admin-card-head">
+  <div>
+    <h2>Users</h2>
+    <p>Search users before managing roles or bans. Admin changes are verified server-side.</p>
+  </div>
+</div>
+
+<div class="admin-toolbar">
+  <input
+    id="user-search"
+    type="search"
+    autocomplete="off"
+    placeholder="Username or display name…"
+  >
+
+  <div></div>
+
+  <button class="btn btn-primary btn-sm" id="user-search-btn" type="button">
+    Search
+  </button>
+
+  <button class="btn btn-quiet btn-sm" id="user-clear-btn" type="button">
+    Clear
+  </button>
+</div>
+
+<div class="admin-section-toolbar">
+  <div class="admin-section-toolbar-left">
+    <span id="users-summary">No results loaded.</span>
+    <span class="admin-kbd">Enter</span>
+    <span>to search</span>
   </div>
 
-  <section class="admin-card" style="margin-top:20px;">
-    <div class="admin-card-head"><div><h2>Comments</h2><p>Search and remove comments that violate your rules.</p></div></div>
-    <div class="admin-toolbar">
-      <input id="comment-search" placeholder="Comment text, username or Article ID…">
-      <button class="btn btn-primary btn-sm" id="comment-search-btn">Search</button>
+  <div class="admin-section-toolbar-right">
+    <label>
+      Rows
+      <select id="user-page-size" aria-label="Users per page">
+        <option value="25">25</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div id="users-list" class="admin-list" aria-live="polite"></div>
+<div id="users-pagination"></div>
+
+  </section>  <!-- =======================================================
+       COMMENTS
+       ======================================================= -->  <section class="admin-section admin-card" id="comments-section"><div class="admin-card-head">
+  <div>
+    <h2>Comments</h2>
+    <p>Search and remove comments that violate your rules.</p>
+  </div>
+</div>
+
+<div class="admin-toolbar">
+  <input
+    id="comment-search"
+    type="search"
+    autocomplete="off"
+    placeholder="Comment text, username or Article ID…"
+  >
+
+  <div></div>
+
+  <button class="btn btn-primary btn-sm" id="comment-search-btn" type="button">
+    Search
+  </button>
+
+  <button class="btn btn-quiet btn-sm" id="comment-clear-btn" type="button">
+    Clear
+  </button>
+</div>
+
+<div class="admin-meta-bar">
+  <div class="admin-meta-left">
+    <span id="comments-summary">No results loaded.</span>
+  </div>
+
+  <div class="admin-meta-right">
+    <label>
+      Rows
+      <select id="comment-page-size" aria-label="Comments per page">
+        <option value="25">25</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div id="comments-list" class="admin-list" aria-live="polite"></div>
+<div id="comments-pagination"></div>
+
+  </section>  <div class="admin-toast-space" aria-hidden="true"></div></main><footer id="site-footer"></footer><script type="module">
+import {
+  supabase,
+  requireAdmin,
+  initHeader,
+  initFooter,
+  escapeHtml,
+  formatDate,
+  toast
+} from './app.js';
+
+/* =========================================================
+   State
+   ========================================================= */
+
+let session = null;
+
+const state = {
+  articles: {
+    rows: [],
+    page: 1,
+    pageSize: 50,
+    loading: false,
+    loaded: false
+  },
+
+  users: {
+    rows: [],
+    page: 1,
+    pageSize: 50,
+    loading: false,
+    loaded: false,
+    searched: false
+  },
+
+  comments: {
+    rows: [],
+    page: 1,
+    pageSize: 50,
+    loading: false,
+    loaded: false
+  }
+};
+
+/* =========================================================
+   Generic helpers
+   ========================================================= */
+
+const $ = (id) => document.getElementById(id);
+
+function escapeAttr(value) {
+  return escapeHtml(String(value ?? ''))
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function setLoading(el, text = 'Loading…') {
+  el.innerHTML = `<div class="admin-loading">${escapeHtml(text)}</div>`;
+}
+
+function setError(el, message) {
+  el.innerHTML = `
+    <div class="admin-error">
+      <strong>Could not load this section.</strong>
+      <span>${escapeHtml(message || 'Unknown error')}</span>
     </div>
-    <div id="comments-list"></div>
-  </section>
-</main>
-<footer id="site-footer"></footer>
+  `;
+}
 
-<script type="module">
-import { supabase, requireAdmin, initHeader, initFooter, escapeHtml, formatDate, toast } from './app.js';
+function getRowsForPage(sectionState) {
+  const start = (sectionState.page - 1) * sectionState.pageSize;
+  return sectionState.rows.slice(start, start + sectionState.pageSize);
+}
 
-let session;
+function getPageCount(sectionState) {
+  return Math.max(1, Math.ceil(sectionState.rows.length / sectionState.pageSize));
+}
 
-(async () => {
-  session = await requireAdmin('auth.html');
-  if (!session) return;
-  await initHeader();
-  initFooter();
-  await Promise.all([loadDashboard(), loadArticles(), loadUsers(), loadComments()]);
-})();
+function clampPage(sectionState) {
+  const max = getPageCount(sectionState);
+  sectionState.page = Math.min(Math.max(1, sectionState.page), max);
+}
+
+function setSummary(el, total, page, pageSize, noun) {
+  if (!total) {
+    el.textContent = `No ${noun} found.`;
+    return;
+  }
+
+  const start = ((page - 1) * pageSize) + 1;
+  const end = Math.min(page * pageSize, total);
+
+  el.textContent = `Showing ${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()} ${noun}.`;
+}
+
+function setButtonBusy(button, busy, busyText = 'Working…') {
+  if (!button) return;
+
+  if (busy) {
+    if (!button.dataset.originalText) {
+      button.dataset.originalText = button.textContent;
+    }
+    button.disabled = true;
+    button.textContent = busyText;
+  } else {
+    button.disabled = false;
+    if (button.dataset.originalText) {
+      button.textContent = button.dataset.originalText;
+      delete button.dataset.originalText;
+    }
+  }
+}
+
+function getEventTargetButton(event) {
+  const target = event.target;
+  return target?.closest('button');
+}
+
+/* =========================================================
+   RPC
+   ========================================================= */
 
 async function rpc(name, args = {}) {
   const { data, error } = await supabase.rpc(name, args);
-  if (error) { toast(error.message, 'error'); throw error; }
+
+  if (error) {
+    toast(error.message, 'error');
+    throw error;
+  }
+
   return data;
 }
 
+/* =========================================================
+   Dashboard
+   ========================================================= */
+
 async function loadDashboard() {
+  const el = $('admin-stats');
+
+  el.innerHTML = `
+    <div class="admin-stat"><strong>—</strong><span>Users</span></div>
+    <div class="admin-stat"><strong>—</strong><span>Banned</span></div>
+    <div class="admin-stat"><strong>—</strong><span>Admins</span></div>
+    <div class="admin-stat"><strong>—</strong><span>Articles</span></div>
+    <div class="admin-stat"><strong>—</strong><span>Published</span></div>
+    <div class="admin-stat"><strong>—</strong><span>Drafts</span></div>
+    <div class="admin-stat"><strong>—</strong><span>Comments</span></div>
+  `;
+
   try {
     const d = await rpc('admin_dashboard');
-    document.getElementById('admin-stats').innerHTML = [
-      ['Users', d.users], ['Banned', d.banned_users], ['Admins', d.admins],
-      ['Articles', d.articles], ['Published', d.published_articles], ['Drafts', d.draft_articles], ['Comments', d.comments]
-    ].map(([label, value]) => `<div class="admin-stat"><strong>${value}</strong><span>${label}</span></div>`).join('');
-  } catch (_) {}
+
+    const values = [
+      ['Users', d?.users],
+      ['Banned', d?.banned_users],
+      ['Admins', d?.admins],
+      ['Articles', d?.articles],
+      ['Published', d?.published_articles],
+      ['Drafts', d?.draft_articles],
+      ['Comments', d?.comments]
+    ];
+
+    el.innerHTML = values.map(([label, value]) => `
+      <div class="admin-stat">
+        <strong>${escapeHtml(Number(value ?? 0).toLocaleString())}</strong>
+        <span>${escapeHtml(label)}</span>
+      </div>
+    `).join('');
+  } catch (_) {
+    el.innerHTML = `
+      <div class="admin-stat" style="grid-column:1/-1;">
+        <strong>—</strong>
+        <span>Dashboard unavailable</span>
+      </div>
+    `;
+  }
 }
+
+/* =========================================================
+   Pagination
+   ========================================================= */
+
+function renderPagination(containerId, sectionState, renderPage) {
+  const el = $(containerId);
+  const totalPages = getPageCount(sectionState);
+
+  if (!sectionState.rows.length || totalPages <= 1) {
+    el.innerHTML = '';
+    return;
+  }
+
+  clampPage(sectionState);
+
+  const current = sectionState.page;
+
+  const pages = new Set();
+
+  pages.add(1);
+  pages.add(totalPages);
+  pages.add(current);
+  pages.add(current - 1);
+  pages.add(current + 1);
+  pages.add(current - 2);
+  pages.add(current + 2);
+
+  const sortedPages = [...pages]
+    .filter(p => p >= 1 && p <= totalPages)
+    .sort((a, b) => a - b);
+
+  let pageButtons = '';
+  let previous = null;
+
+  for (const p of sortedPages) {
+    if (previous !== null && p - previous > 1) {
+      pageButtons += `<span class="admin-page-info">…</span>`;
+    }
+
+    pageButtons += `
+      <button
+        type="button"
+        class="btn btn-quiet btn-sm admin-page-number ${p === current ? 'is-active' : ''}"
+        data-page="${p}"
+        ${p === current ? 'aria-current="page"' : ''}
+      >
+        ${p}
+      </button>
+    `;
+
+    previous = p;
+  }
+
+  el.innerHTML = `
+    <div class="admin-pagination">
+      <div class="admin-pagination-left">
+        <button
+          type="button"
+          class="btn btn-quiet btn-sm"
+          data-page-action="first"
+          ${current === 1 ? 'disabled' : ''}
+        >First</button>
+
+        <button
+          type="button"
+          class="btn btn-quiet btn-sm"
+          data-page-action="previous"
+          ${current === 1 ? 'disabled' : ''}
+        >Previous</button>
+      </div>
+
+      <div class="admin-pagination-right">
+        ${pageButtons}
+
+        <button
+          type="button"
+          class="btn btn-quiet btn-sm"
+          data-page-action="next"
+          ${current === totalPages ? 'disabled' : ''}
+        >Next</button>
+
+        <button
+          type="button"
+          class="btn btn-quiet btn-sm"
+          data-page-action="last"
+          ${current === totalPages ? 'disabled' : ''}
+        >Last</button>
+      </div>
+    </div>
+  `;
+
+  el.querySelectorAll('[data-page]').forEach(button => {
+    button.addEventListener('click', () => {
+      sectionState.page = Number(button.dataset.page);
+      renderPage();
+    });
+  });
+
+  el.querySelectorAll('[data-page-action]').forEach(button => {
+    button.addEventListener('click', () => {
+      const action = button.dataset.pageAction;
+      const max = getPageCount(sectionState);
+
+      if (action === 'first') sectionState.page = 1;
+      if (action === 'previous') sectionState.page = Math.max(1, sectionState.page - 1);
+      if (action === 'next') sectionState.page = Math.min(max, sectionState.page + 1);
+      if (action === 'last') sectionState.page = max;
+
+      renderPage();
+    });
+  });
+}
+
+/* =========================================================
+   Articles
+   ========================================================= */
 
 async function loadArticles() {
-  const search = document.getElementById('article-search').value.trim() || null;
-  const status = document.getElementById('article-status').value || null;
-  let rows;
-  try { rows = await rpc('admin_find_articles', { p_search: search, p_status: status }); } catch (_) { return; }
-  const el = document.getElementById('articles-list');
-  if (!rows?.length) { el.innerHTML = `<div class="admin-empty">No articles found.</div>`; return; }
-  el.innerHTML = rows.map(a => `
-    <div class="admin-row">
-      <div class="admin-row-main">
-        <div class="admin-id">${escapeHtml(a.article_code)}</div>
-        <h3>${escapeHtml(a.title)}</h3>
-        <div class="admin-meta">${escapeHtml(a.author_display_name || a.author_username)} · ${escapeHtml(a.status || 'unknown')} · ${formatDate(a.created_at)} · ${a.like_count || 0} likes · ${a.comment_count || 0} comments</div>
-      </div>
-      <div class="admin-actions">
-        <a class="btn btn-quiet btn-sm" href="article.html?slug=${encodeURIComponent(a.slug)}" target="_blank">View</a>
-        ${a.status === 'published' ? `<button class="btn btn-quiet btn-sm" data-action="unpublish" data-code="${escapeHtml(a.article_code)}">Unpublish</button>` : `<button class="btn btn-quiet btn-sm" data-action="publish" data-code="${escapeHtml(a.article_code)}">Publish</button>`}
-        <button class="btn btn-danger btn-sm" data-action="delete-article" data-code="${escapeHtml(a.article_code)}">Remove</button>
-      </div>
-    </div>`).join('');
+  const search = $('article-search').value.trim() || null;
+  const status = $('article-status').value || null;
 
-  el.querySelectorAll('[data-action="delete-article"]').forEach(btn => btn.addEventListener('click', async () => {
-    const code = btn.dataset.code;
-    if (!confirm(`Permanently remove article ${code}? This also removes its sources, tags, likes, bookmarks and comments.`)) return;
-    try { await rpc('admin_delete_article', { p_article_ref: code }); toast(`${code} removed`); await refresh(); } catch (_) {}
-  }));
-  el.querySelectorAll('[data-action="publish"],[data-action="unpublish"]').forEach(btn => btn.addEventListener('click', async () => {
-    const status = btn.dataset.action === 'publish' ? 'published' : 'draft';
-    try { await rpc('admin_set_article_status', { p_article_ref: btn.dataset.code, p_status: status }); toast(status === 'published' ? 'Article published' : 'Article unpublished'); await refresh(); } catch (_) {}
-  }));
-}
+  const s = state.articles;
+  const list = $('articles-list');
 
-async function loadUsers() {
-  const search = document.getElementById('user-search').value.trim() || null;
-  let rows;
-  try { rows = await rpc('admin_find_users', { p_search: search }); } catch (_) { return; }
-  const el = document.getElementById('users-list');
-  if (!rows?.length) { el.innerHTML = `<div class="admin-empty">No users found.</div>`; return; }
-  el.innerHTML = rows.map(u => `
-    <div class="admin-row">
-      <div class="admin-row-main">
-        <div><strong>@${escapeHtml(u.username)}</strong> ${u.is_admin ? '<span class="admin-badge">ADMIN</span>' : ''} ${u.banned_at ? '<span class="ban-badge">BANNED</span>' : ''}</div>
-        <div class="admin-meta">${escapeHtml(u.display_name || '')} · ${u.article_count} articles · joined ${formatDate(u.created_at)}</div>
-        ${u.banned_at && u.ban_reason ? `<div class="admin-ban-reason">Reason: ${escapeHtml(u.ban_reason)}</div>` : ''}
-      </div>
-      <div class="admin-actions">
-        ${u.is_admin ? `<button class="btn btn-quiet btn-sm" data-user-admin="false" data-username="${escapeHtml(u.username)}">Remove admin</button>` : `<button class="btn btn-quiet btn-sm" data-user-admin="true" data-username="${escapeHtml(u.username)}">Make admin</button>`}
-        ${u.banned_at ? `<button class="btn btn-quiet btn-sm" data-user-ban="false" data-username="${escapeHtml(u.username)}">Unban</button>` : `<button class="btn btn-danger btn-sm" data-user-ban="true" data-username="${escapeHtml(u.username)}">Ban</button>`}
-      </div>
-    </div>`).join('');
+  s.loading = true;
+  setLoading(list, 'Loading articles…');
 
-  el.querySelectorAll('[data-user-admin]').forEach(btn => btn.addEventListener('click', async () => {
-    const makeAdmin = btn.dataset.userAdmin === 'true';
-    if (!makeAdmin && !confirm(`Remove admin access from @${btn.dataset.username}?`)) return;
-    try { await rpc('admin_set_user_admin', { p_username: btn.dataset.username, p_make_admin: makeAdmin }); toast(makeAdmin ? 'Admin access granted' : 'Admin access removed'); await refresh(); } catch (_) {}
-  }));
-  el.querySelectorAll('[data-user-ban]').forEach(btn => btn.addEventListener('click', async () => {
-    const ban = btn.dataset.userBan === 'true';
-    let reason = null;
-    if (ban) {
-      reason = prompt(`Reason for banning @${btn.dataset.username}?`) || '';
-      if (!confirm(`Ban @${btn.dataset.username}?`)) return;
-    } else if (!confirm(`Unban @${btn.dataset.username}?`)) return;
-    try { await rpc('admin_set_user_banned', { p_username: btn.dataset.username, p_banned: ban, p_reason: reason }); toast(ban ? 'User banned' : 'User unbanned'); await refresh(); } catch (_) {}
-  }));
-}
+  try {
+    const rows = await rpc('admin_find_articles', {
+      p_search: search,
+      p_status: status
+    });
 
-async function loadComments() {
-  const search = document.getElementById('comment-search').value.trim() || null;
-  let rows;
-  try { rows = await rpc('admin_find_comments', { p_search: search }); } catch (_) { return; }
-  const el = document.getElementById('comments-list');
-  if (!rows?.length) { el.innerHTML = `<div class="admin-empty">No comments found.</div>`; return; }
-  el.innerHTML = rows.map(c => `
-    <div class="admin-row">
-      <div class="admin-row-main">
-        <div class="admin-meta"><strong>@${escapeHtml(c.username)}</strong> on ${escapeHtml(c.article_code)} · ${formatDate(c.created_at)}</div>
-        <div class="admin-comment">${escapeHtml(c.content)}</div>
-      </div>
-      <div class="admin-actions"><button class="btn btn-danger btn-sm" data-comment-id="${escapeHtml(c.id)}">Remove</button></div>
-    </div>`).join('');
-  el.querySelectorAll('[data-comment-id]').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Remove this comment?')) return;
-    try { await rpc('admin_delete_comment', { p_comment_id: btn.dataset.commentId }); toast('Comment removed'); await refresh(); } catch (_) {}
-  }));
-}
-
-async function refresh() { await Promise.all([loadDashboard(), loadArticles(), loadUsers(), loadComments()]); }
-document.getElementById('article-search-btn').addEventListener('click', loadArticles);
-document.getElementById('article-status').addEventListener('change', loadArticles);
-document.getElementById('user-search-btn').addEventListener('click', loadUsers);
-document.getElementById('comment-search-btn').addEventListener('click', loadComments);
-['article-search','user-search','comment-search'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById(id.replace('-search','-search-btn')).click(); }));
-</script>
-</body>
-</html>
+    s.rows =
