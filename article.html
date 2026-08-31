@@ -479,4 +479,111 @@ async function loadRelated() {
       .eq('status', 'published').eq('category', article.category || '').neq('id', article.id).limit(3);
     for (const a of data || []) if (!related.find(r => r.id === a.id)) related.push(a);
   }
-  
+  related = related.slice(0, 3);
+  if (!related.length) return;
+
+  relatedRoot.innerHTML = `
+    <div class="section-label" style="margin-top:20px;">Related research</div>
+    <div class="related-grid">
+      ${related.map(a => `
+        <a href="article.html?slug=${encodeURIComponent(a.slug)}" class="related-card">
+          <h4>${escapeHtml(a.title)}</h4>
+          <div class="byline">${avatarHtml(a.users, 18)} <span>${escapeHtml(a.users?.display_name || a.users?.username || '')}</span></div>
+        </a>
+      `).join('')}
+    </div>`;
+}
+
+// ---- Comments ----
+async function loadComments() {
+  const { data } = await supabase
+    .from('comments')
+    .select('*, users(username, display_name, avatar_url)')
+    .eq('article_id', article.id)
+    .order('created_at', { ascending: true });
+
+  const all = data || [];
+  const top = all.filter(c => !c.parent_comment_id);
+  const repliesOf = (id) => all.filter(c => c.parent_comment_id === id);
+
+  function commentHtml(c, depth = 0) {
+    const isMine = session && session.user.id === c.user_id;
+    return `
+      <div class="comment" data-id="${c.id}">
+        ${avatarHtml(c.users, 34)}
+        <div class="comment-body">
+          <div class="comment-head">
+            <span class="comment-author">${escapeHtml(c.users?.display_name || c.users?.username || 'Unknown')}</span>
+            ${c.is_pinned ? '<span class="pinned-badge">Pinned</span>' : ''}
+            <span class="comment-time">${timeAgo(c.created_at)}</span>
+          </div>
+          <div class="comment-text">${escapeHtml(c.content)}</div>
+          <div class="comment-actions">
+            ${session ? `<button class="reply-btn" data-id="${c.id}">Reply</button>` : ''}
+            ${isMine ? `<button class="delete-btn" data-id="${c.id}">Delete</button>` : ''}
+            ${(session && session.user.id === article.author_id && !c.is_pinned) ? `<button class="pin-btn" data-id="${c.id}">Pin</button>` : ''}
+          </div>
+          <div class="reply-form-slot" data-slot="${c.id}"></div>
+          <div class="comment-replies">${repliesOf(c.id).map(r => commentHtml(r, depth + 1)).join('')}</div>
+        </div>
+      </div>`;
+  }
+
+  commentsRoot.innerHTML = `
+    <div class="comments-section">
+      <div class="section-label" style="margin-top:20px;">Discussion (${all.length})</div>
+      ${session ? `
+        <form class="comment-form" id="top-comment-form">
+          ${avatarHtml(myProfile, 38)}
+          <textarea placeholder="Add to the discussion..." id="top-comment-text"></textarea>
+          <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Post</button>
+        </form>
+      ` : `<p class="hint" style="padding:16px 0;"><a href="auth.html?next=${encodeURIComponent(window.location.href)}" style="color:var(--evergreen-dark);font-weight:600;">Sign in</a> to join the discussion.</p>`}
+      <div id="comment-list">
+        ${top.length ? top.sort((a, b) => (b.is_pinned - a.is_pinned)).map(c => commentHtml(c)).join('') : '<div class="empty-state" style="padding:40px 0;"><p>No comments yet — be the first to weigh in.</p></div>'}
+      </div>
+    </div>`;
+
+  const topForm = document.getElementById('top-comment-form');
+  if (topForm) topForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = document.getElementById('top-comment-text').value.trim();
+    if (!text) return;
+    const { error } = await supabase.from('comments').insert({ article_id: article.id, user_id: session.user.id, content: text });
+    if (error) { toast('Could not post comment', 'error'); return; }
+    document.getElementById('top-comment-text').value = '';
+    loadComments();
+  });
+
+  commentsRoot.querySelectorAll('.reply-btn').forEach(btn => btn.addEventListener('click', () => {
+    const slot = commentsRoot.querySelector(`.reply-form-slot[data-slot="${btn.dataset.id}"]`);
+    if (slot.innerHTML) { slot.innerHTML = ''; return; }
+    slot.innerHTML = `
+      <form class="comment-form" style="padding:10px 0;">
+        <textarea placeholder="Write a reply..." style="min-height:44px;"></textarea>
+        <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Reply</button>
+      </form>`;
+    const form = slot.querySelector('form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = form.querySelector('textarea').value.trim();
+      if (!text) return;
+      await supabase.from('comments').insert({ article_id: article.id, user_id: session.user.id, content: text, parent_comment_id: btn.dataset.id });
+      loadComments();
+    });
+  }));
+
+  commentsRoot.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this comment?')) return;
+    await supabase.from('comments').delete().eq('id', btn.dataset.id);
+    loadComments();
+  }));
+
+  commentsRoot.querySelectorAll('.pin-btn').forEach(btn => btn.addEventListener('click', async () => {
+    await supabase.from('comments').update({ is_pinned: true }).eq('id', btn.dataset.id);
+    loadComments();
+  }));
+}
+</script>
+</body>
+</html>
