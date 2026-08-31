@@ -105,23 +105,90 @@ img { max-width: 100%; display: block; }
 }
 
 .header-search {
+  position: relative;
   flex: 1;
   max-width: 380px;
+  min-width: 0;
+}
+
+.header-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--ink-faint);
+  pointer-events: none;
+  transition: color 0.15s ease;
 }
 
 .header-search input {
   width: 100%;
   border: 1px solid var(--hairline);
   background: var(--paper-raised);
-  border-radius: var(--radius);
-  padding: 9px 14px;
+  border-radius: 100px;
+  padding: 9px 34px 9px 36px;
   font-size: 14px;
   color: var(--ink);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.header-search input::placeholder { color: var(--ink-faint); }
+
+.header-search input:hover {
+  border-color: var(--hairline-strong);
 }
 
 .header-search input:focus {
   outline: none;
-  border-color: var(--ink-faint);
+  border-color: var(--evergreen);
+  background: var(--paper-raised);
+  box-shadow: 0 0 0 3px var(--evergreen-wash);
+}
+
+.header-search:focus-within .header-search-icon {
+  color: var(--evergreen);
+}
+
+.header-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.85);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--hairline);
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.header-search.has-value .header-search-clear {
+  display: flex;
+  opacity: 1;
+}
+
+.header-search-clear:hover {
+  background: var(--ink-faint);
+  color: #fff;
+}
+
+@media (max-width: 720px) {
+  .header-search { max-width: none; order: 3; flex-basis: 100%; margin-top: 10px; }
+  .site-header .shell { flex-wrap: wrap; height: auto; padding-top: 12px; padding-bottom: 12px; row-gap: 4px; }
+}
+
+@media (max-width: 480px) {
+  .header-search input { font-size: 16px; } /* prevents iOS zoom-on-focus */
 }
 
 .header-nav {
