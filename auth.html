@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — Vequence</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="auth-wrap">
+  <div id="signin-view">
+    <h1>Welcome back</h1>
+    <p class="sub">Sign in to write, follow authors, and save research.</p>
+    <form id="signin-form">
+      <div class="field">
+        <label for="si-email">Email</label>
+        <input type="email" id="si-email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="si-password">Password</label>
+        <input type="password" id="si-password" required autocomplete="current-password">
+        <div class="error" id="si-error" style="display:none;"></div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="si-submit">Sign in</button>
+    </form>
+    <p class="auth-switch">New to Vequence? <a href="#" id="show-signup">Create an account</a></p>
+  </div>
+
+  <div id="signup-view" style="display:none;">
+    <div class="step-progress" id="step-progress"></div>
+
+    <div class="signup-step" data-step="1">
+      <h1>Your email</h1>
+      <p class="sub">We will send a verification code to confirm it is you.</p>
+      <form id="step-email-form">
+        <div class="field">
+          <label for="su-email">Email</label>
+          <input type="email" id="su-email" required autocomplete="email" placeholder="you@university.edu">
+          <div class="error" id="su-email-error" style="display:none;"></div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="su-email-btn">Send code</button>
+      </form>
+    </div>
+
+    <div class="signup-step" data-step="2" style="display:none;">
+      <h1>Check your inbox</h1>
+      <p class="sub">Enter the <strong>6-digit code</strong> emailed to <strong id="otp-email-label"></strong>. Look for a number like 123456 — not a link.</p>
+      <form id="step-otp-form">
+        <div class="field">
+          <label for="su-otp">6-digit code</label>
+          <input type="text" id="su-otp" required inputmode="numeric" pattern="[0-9]{6,8}" maxlength="8" placeholder="000000" autocomplete="one-time-code" class="otp-input">
+          <div class="hint">Check spam if you do not see it within a minute.</div>
+          <div class="error" id="su-otp-error" style="display:none;"></div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="su-otp-btn">Verify email</button>
+      </form>
+      <p class="auth-switch"><a href="#" id="resend-otp">Resend code</a> · <a href="#" id="change-email">Change email</a></p>
+    </div>
+
+    <div class="signup-step" data-step="3" style="display:none;">
+      <h1>Choose a username</h1>
+      <p class="sub">This is how others will find you on Vequence.</p>
+      <form id="step-username-form">
+        <div class="field">
+          <label for="su-username">Username</label>
+          <input type="text" id="su-username" required pattern="[a-z0-9_]{3,30}" placeholder="janesmith" autocomplete="username">
+          <div class="hint">Lowercase letters, numbers, underscores. 3–30 characters.</div>
+          <div class="error" id="su-username-error" style="display:none;"></div>
+        </div>
+        <div class="field">
+          <label for="su-displayname">Display name</label>
+          <input type="text" id="su-displayname" required placeholder="Dr. Jane Smith" autocomplete="name">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="su-username-btn">Continue</button>
+      </form>
+    </div>
+
+    <div class="signup-step" data-step="4" style="display:none;">
+      <h1>Create a password</h1>
+      <p class="sub">At least 8 characters with one capital letter.</p>
+      <form id="step-password-form">
+        <div class="field">
+          <label for="su-password">Password</label>
+          <input type="password" id="su-password" required minlength="8" autocomplete="new-password">
+          <div class="hint" id="pw-hint">8+ characters · 1 uppercase letter</div>
+          <div class="error" id="su-password-error" style="display:none;"></div>
+        </div>
+        <div class="field">
+          <label for="su-password2">Confirm password</label>
+          <input type="password" id="su-password2" required minlength="8" autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="su-password-btn">Continue</button>
+      </form>
+    </div>
+
+    <div class="signup-step" data-step="5" style="display:none;">
+      <h1>Profile picture</h1>
+      <p class="sub">Optional — you can skip and add one later.</p>
+      <div class="avatar-setup">
+        <div id="su-avatar-preview" class="avatar-preview-lg">?</div>
+        <div class="image-upload-zone" id="su-avatar-zone" style="margin-top:16px;">
+          <span>Click to upload a photo</span>
+          <input type="file" id="su-avatar-input" accept="image/*" style="display:none;">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:24px;">
+        <button type="button" class="btn btn-quiet btn-block" id="su-avatar-skip">Skip</button>
+        <button type="button" class="btn btn-primary btn-block" id="su-avatar-next">Continue</button>
+      </div>
+    </div>
+
+    <div class="signup-step" data-step="6" style="display:none;">
+      <h1>What interests you?</h1>
+      <p class="sub">Pick a few topics so we can personalize Discover for you.</p>
+      <div class="chip-row" id="interest-chips" style="margin:20px 0;"></div>
+      <button type="button" class="btn btn-primary btn-block" id="su-finish-btn">Finish setup</button>
+      <p class="auth-switch"><a href="#" id="su-interests-skip">Skip for now</a></p>
+    </div>
+
+    <p class="auth-switch" id="signup-to-signin" style="margin-top:28px;">Already have an account? <a href="#" id="show-signin">Sign in</a></p>
+  </div>
+</main>
+
+<script type="module">
+import {
+  supabase, initHeader, getSession, ensureProfile, toast, slugify,
+  INTEREST_TOPICS, escapeHtml
+} from './app.js';
+
+initHeader();
+
+(async () => {
+  const session = await getSession();
+  if (session) {
+    await ensureProfile(session);
+    window.location.href = nextUrl();
+  }
+})();
+
+const signinView = document.getElementById('signin-view');
+const signupView = document.getElementById('signup-view');
+
+document.getElementById('show-signup').addEventListener('click', (e) => {
+  e.preventDefault();
+  signinView.style.display = 'none';
+  signupView.style.display = 'block';
+  goStep(1);
+});
+document.getElementById('show-signin').addEventListener('click', (e) => {
+  e.preventDefault();
+  signupView.style.display = 'none';
+  signinView.style.display = 'block';
+});
+
+function nextUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('next') || 'index.html';
+}
+
+document.getElementById('signin-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('si-submit');
+  const errEl = document.getElementById('si-error');
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+
+  const email = document.getElementById('si-email').value.trim();
+  const password = document.getElementById('si-password').value;
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = 'Sign in';
+
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  if (data.session) await ensureProfile(data.session);
+  toast('Welcome back!');
+  window.location.href = nextUrl();
+});
+
+let signupEmail = '';
+let signupUsername = '';
+let signupDisplayName = '';
+let avatarUrl = null;
+let selectedInterests = [];
+
+function goStep(n) {
+  document.querySelectorAll('.signup-step').forEach(el => {
+    el.style.display = el.dataset.step === String(n) ? 'block' : 'none';
+  });
+  const labels = ['Email', 'Verify', 'Username', 'Password', 'Photo', 'Topics'];
+  const prog = document.getElementById('step-progress');
+  prog.innerHTML = labels.map((l, i) =>
+    '<span class="step-dot ' + (i + 1 === n ? 'active' : '') + ' ' + (i + 1 < n ? 'done' : '') + '">' + (i + 1) + '</span>'
+  ).join('<span class="step-line"></span>');
+  document.getElementById('signup-to-signin').style.display = n <= 2 ? 'block' : 'none';
+}
+
+document.getElementById('step-email-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('su-email-btn');
+  const errEl = document.getElementById('su-email-error');
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+
+  signupEmail = document.getElementById('su-email').value.trim().toLowerCase();
+
+  // Sends a 6-digit OTP when the Magic Link / OTP template uses {{ .Token }}
+  const { error } = await supabase.auth.signInWithOtp({
+    email: signupEmail,
+    options: {
+      shouldCreateUser: true
+    }
+  });
+
+  btn.disabled = false; btn.textContent = 'Send code';
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  document.getElementById('otp-email-label').textContent = signupEmail;
+  document.getElementById('su-otp').value = '';
+  toast('6-digit code sent — check your email');
+  goStep(2);
+});
+
+document.getElementById('resend-otp').addEventListener('click', async (e) => {
+  e.preventDefault();
+  signupEmail = (signupEmail || '').trim().toLowerCase();
+  const { error } = await supabase.auth.signInWithOtp({
+    email: signupEmail,
+    options: { shouldCreateUser: true }
+  });
+  if (error) toast(error.message, 'error');
+  else toast('New code sent');
+});
+
+document.getElementById('change-email').addEventListener('click', (e) => {
+  e.preventDefault();
+  goStep(1);
+});
+
+// Keep OTP field digits-only (6–8 digits depending on project settings)
+document.getElementById('su-otp').addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 8);
+});
+
+document.getElementById('step-otp-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('su-otp-btn');
+  const errEl = document.getElementById('su-otp-error');
+  errEl.style.display = 'none';
+
+  const email = (signupEmail || document.getElementById('otp-email-label').textContent || '').trim().toLowerCase();
+  const token = document.getElementById('su-otp').value.replace(/\D/g, '');
+
+  if (!email) {
+    errEl.textContent = 'Missing email. Go back and request a new code.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (token.length < 6 || token.length > 8) {
+    errEl.textContent = 'Enter the full code from your email (usually 6 digits).';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+
+  // Supabase accepts different OTP types depending on how the email was issued.
+  // Try the common ones in order until one succeeds.
+  const types = ['email', 'magiclink', 'signup'];
+  let data = null;
+  let lastError = null;
+
+  for (const type of types) {
+    const result = await supabase.auth.verifyOtp({ email, token, type });
+    if (!result.error && result.data?.session) {
+      data = result.data;
+      lastError = null;
+      break;
+    }
+    lastError = result.error;
+    // If token is clearly wrong, no point trying other types
+    const msg = (result.error?.message || '').toLowerCase();
+    if (msg.includes('rate') || msg.includes('too many')) break;
+  }
+
+  btn.disabled = false; btn.textContent = 'Verify email';
+
+  if (lastError || !data?.session) {
+    const msg = (lastError?.message || '').toLowerCase();
+    if (msg.includes('expired')) {
+      errEl.textContent = 'This code has expired. Tap Resend code and use the newest email.';
+    } else if (msg.includes('invalid') || msg.includes('otp')) {
+      errEl.textContent = 'Code not accepted. Use the newest code, same email, no spaces. Or resend and try again.';
+    } else {
+      errEl.textContent = lastError?.message || 'Verification failed. Resend the code and try again.';
+    }
+    errEl.style.display = 'block';
+    return;
+  }
+
+  signupEmail = email;
+  toast('Email verified');
+  goStep(3);
+});
+
+document.getElementById('step-username-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('su-username-btn');
+  const errEl = document.getElementById('su-username-error');
+  errEl.style.display = 'none';
+
+  signupUsername = slugify(document.getElementById('su-username').value.trim()).replace(/-/g, '_');
+  signupDisplayName = document.getElementById('su-displayname').value.trim();
+
+  if (!/^[a-z0-9_]{3,30}$/.test(signupUsername)) {
+    errEl.textContent = 'Username must be 3–30 lowercase letters, numbers, or underscores.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!signupDisplayName) {
+    errEl.textContent = 'Display name is required.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  const { data: existing } = await supabase.from('users').select('id').eq('username', signupUsername).maybeSingle();
+  const session = (await supabase.auth.getSession()).data.session;
+  if (existing && existing.id !== session?.user?.id) {
+    errEl.textContent = 'That username is taken. Try another.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Continue';
+    return;
+  }
+
+  await supabase.auth.updateUser({
+    data: { username: signupUsername, display_name: signupDisplayName }
+  });
+  if (session) {
+    await supabase.from('users').upsert({
+      id: session.user.id,
+      username: signupUsername,
+      display_name: signupDisplayName
+    }, { onConflict: 'id' });
+  }
+
+  btn.disabled = false; btn.textContent = 'Continue';
+  goStep(4);
+});
+
+function validatePassword(pw) {
+  if (pw.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(pw)) return 'Password must include at least one capital letter.';
+  return null;
+}
+
+document.getElementById('su-password').addEventListener('input', () => {
+  const pw = document.getElementById('su-password').value;
+  const hint = document.getElementById('pw-hint');
+  const err = validatePassword(pw);
+  if (!pw) {
+    hint.textContent = '8+ characters · 1 uppercase letter';
+    hint.style.color = '';
+  } else if (err) {
+    hint.textContent = err;
+    hint.style.color = 'var(--red)';
+  } else {
+    hint.textContent = 'Looks good';
+    hint.style.color = 'var(--evergreen)';
+  }
+});
+
+document.getElementById('step-password-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('su-password-btn');
+  const errEl = document.getElementById('su-password-error');
+  errEl.style.display = 'none';
+
+  const pw = document.getElementById('su-password').value;
+  const pw2 = document.getElementById('su-password2').value;
+  const err = validatePassword(pw);
+  if (err) {
+    errEl.textContent = err;
+    errEl.style.display = 'block';
+    return;
+  }
+  if (pw !== pw2) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  const { error } = await supabase.auth.updateUser({ password: pw });
+  btn.disabled = false; btn.textContent = 'Continue';
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  toast('Password set');
+  goStep(5);
+});
+
+const avatarZone = document.getElementById('su-avatar-zone');
+const avatarInput = document.getElementById('su-avatar-input');
+const avatarPreview = document.getElementById('su-avatar-preview');
+
+avatarZone.addEventListener('click', () => avatarInput.click());
+avatarInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const session = (await supabase.auth.getSession()).data.session;
+  if (!session) { toast('Session expired — please start over', 'error'); return; }
+
+  avatarZone.querySelector('span').textContent = 'Uploading…';
+  const path = session.user.id + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+  const { error } = await supabase.storage.from('avatars').upload(path, file);
+  if (error) {
+    toast('Upload failed: ' + error.message, 'error');
+    avatarZone.querySelector('span').textContent = 'Click to upload a photo';
+    return;
+  }
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+  avatarUrl = data.publicUrl;
+  avatarPreview.innerHTML = '<img src="' + avatarUrl + '" alt="">';
+  await supabase.from('users').update({ avatar_url: avatarUrl }).eq('id', session.user.id);
+  avatarZone.querySelector('span').textContent = 'Photo set — click to change';
+  toast('Photo uploaded');
+});
+
+document.getElementById('su-avatar-skip').addEventListener('click', () => goStep(6));
+document.getElementById('su-avatar-next').addEventListener('click', () => goStep(6));
+
+const chipsEl = document.getElementById('interest-chips');
+chipsEl.innerHTML = INTEREST_TOPICS.map(t =>
+  '<button type="button" class="chip" data-topic="' + escapeHtml(t) + '">' + escapeHtml(t) + '</button>'
+).join('');
+chipsEl.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const t = chip.dataset.topic;
+    if (selectedInterests.includes(t)) {
+      selectedInterests = selectedInterests.filter(x => x !== t);
+      chip.classList.remove('active');
+    } else {
+      selectedInterests.push(t);
+      chip.classList.add('active');
+    }
+  });
+});
+
+async function finishSignup() {
+  const session = (await supabase.auth.getSession()).data.session;
+  if (!session) {
+    toast('Session expired — please sign in', 'error');
+    window.location.href = 'auth.html';
+    return;
+  }
+
+  await supabase.auth.updateUser({
+    data: {
+      username: signupUsername,
+      display_name: signupDisplayName,
+      interests: selectedInterests
+    }
+  });
+
+  await ensureProfile(session);
+  await supabase.from('users').upsert({
+    id: session.user.id,
+    username: signupUsername,
+    display_name: signupDisplayName,
+    avatar_url: avatarUrl
+  }, { onConflict: 'id' });
+
+  if (selectedInterests.length) {
+    localStorage.setItem('vequence-interests', JSON.stringify(selectedInterests));
+  }
+
+  toast('Welcome to Vequence!');
+  window.location.href = nextUrl();
+}
+
+document.getElementById('su-finish-btn').addEventListener('click', finishSignup);
+document.getElementById('su-interests-skip').addEventListener('click', (e) => {
+  e.preventDefault();
+  selectedInterests = [];
+  finishSignup();
+});
+</script>
+</body>
+</html>

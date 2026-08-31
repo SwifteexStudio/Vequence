@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile — Vequence</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="shell-narrow" id="profile-root">
+  <div style="padding-top:60px;">
+    <div class="skeleton" style="width:84px;height:84px;border-radius:50%;margin-bottom:20px;"></div>
+    <div class="skeleton" style="width:220px;height:28px;margin-bottom:10px;"></div>
+    <div class="skeleton" style="width:340px;height:16px;"></div>
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script type="module">
+import { supabase, initHeader, initFooter, getSession, getCurrentProfile, ensureProfile, escapeHtml, formatDate, avatarHtml, toast, initials } from './app.js';
+
+const username = new URLSearchParams(window.location.search).get('u');
+const root = document.getElementById('profile-root');
+
+let session, profileUser, isMe, iFollow = false, activeTab = 'articles';
+
+(async () => {
+  const headerInfo = await initHeader();
+  session = headerInfo.session;
+  initFooter();
+
+  // If the user is viewing their own profile but the ?u= param is missing/wrong,
+  // or the profile row was never created, ensure it now and redirect.
+  if (session) {
+    const me = await ensureProfile(session);
+    if (me && (!username || username === me.username)) {
+      // ok — fall through with correct username
+    } else if (!username && me) {
+      window.location.replace(`profile.html?u=${encodeURIComponent(me.username)}`);
+      return;
+    }
+  }
+
+  if (!username) {
+    showNotFound();
+    return;
+  }
+
+  let { data: user, error } = await supabase.from('users').select('*').eq('username', username).single();
+
+  // If looking up own profile and row is still missing, force-create then retry
+  if ((error || !user) && session) {
+    const me = await ensureProfile(session);
+    if (me && me.username === username) {
+      user = me;
+      error = null;
+    }
+  }
+
+  if (error || !user) {
+    showNotFound();
+    return;
+  }
+  profileUser = user;
+  isMe = session && session.user.id === user.id;
+
+  const [{ count: followerCount }, { count: followingCount }, { count: articleCount }] = await Promise.all([
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('followed_id', user.id),
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
+    supabase.from('articles').select('*', { count: 'exact', head: true }).eq('author_id', user.id).eq('status', 'published')
+  ]);
+
+  if (session && !isMe) {
+    const { data: f } = await supabase.from('follows').select('follower_id').eq('follower_id', session.user.id).eq('followed_id', user.id).maybeSingle();
+    iFollow = !!f;
+  }
+
+  renderProfile({ followerCount, followingCount, articleCount });
+  loadTab('articles');
+
+  // Auto-open edit form when profile still has placeholder username / "User"
+  if (isMe && needsProfileSetup()) {
+    toggleEditForm(true);
+  }
+})();
+
+function showNotFound() {
+  root.innerHTML = `<div class="empty-state" style="padding-top:100px;"><h3>Profile not found</h3><p>This user may not have finished setting up their profile yet.</p><a href="index.html" class="btn btn-outline" style="margin-top:16px;">Back to Discover</a></div>`;
+}
+
+function renderProfile(stats) {
+  root.innerHTML = `
+    <div class="profile-header">
+      ${avatarHtml(profileUser, 84)}
+      <div style="flex:1;">
+        <h1>${escapeHtml(profileUser.display_name || profileUser.username)}</h1>
+        <div class="handle">@${escapeHtml(profileUser.username)}</div>
+        ${profileUser.bio ? `<p class="bio">${escapeHtml(profileUser.bio)}</p>` : ''}
+        <div class="profile-stats">
+          <span><strong>${stats.articleCount ?? 0}</strong> articles</span>
+          <span><strong>${stats.followerCount ?? 0}</strong> followers</span>
+          <span><strong>${stats.followingCount ?? 0}</strong> following</span>
+        </div>
+        ${isMe
+          ? `<button class="btn btn-quiet btn-sm" id="edit-profile-btn">Edit profile</button>`
+          : session
+            ? `<button class="btn ${iFollow ? 'btn-quiet' : 'btn-primary'} btn-sm" id="follow-btn">${iFollow ? 'Following' : 'Follow'}</button>`
+            : `<a href="auth.html" class="btn btn-primary btn-sm">Sign in to follow</a>`
+        }
+      </div>
+    </div>
+
+    <div id="edit-profile-form" style="display:none; padding-bottom:24px;"></div>
+
+    <div class="profile-tabs">
+      <button data-tab="articles" class="active">Articles</button>
+      ${isMe ? `<button data-tab="bookmarks">Saved</button><button data-tab="drafts">Drafts</button>` : ''}
+    </div>
+    <div id="tab-content"></div>
+  `;
+
+  const followBtn = document.getElementById('follow-btn');
+  if (followBtn) followBtn.addEventListener('click', toggleFollow);
+
+  const editBtn = document.getElementById('edit-profile-btn');
+  if (editBtn) editBtn.addEventListener('click', toggleEditForm);
+
+  root.querySelectorAll('.profile-tabs button').forEach(btn => btn.addEventListener('click', () => {
+    root.querySelectorAll('.profile-tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadTab(btn.dataset.tab);
+  }));
+}
+
+async function toggleFollow() {
+  if (!session) return;
+  const btn = document.getElementById('follow-btn');
+  if (iFollow) {
+    await supabase.from('follows').delete().eq('follower_id', session.user.id).eq('followed_id', profileUser.id);
+    iFollow = false;
+  } else {
+    await supabase.from('follows').insert({ follower_id: session.user.id, followed_id: profileUser.id });
+    iFollow = true;
+    toast(`Following ${profileUser.display_name || profileUser.username}`);
+  }
+  btn.textContent = iFollow ? 'Following' : 'Follow';
+  btn.className = `btn ${iFollow ? 'btn-quiet' : 'btn-primary'} btn-sm`;
+}
+
+function needsProfileSetup() {
+  const uname = (profileUser.username || '').toLowerCase();
+  const dname = (profileUser.display_name || '').trim();
+  return uname.startsWith('user_') || dname === 'User' || dname === '' || !uname;
+}
+
+function toggleEditForm(forceOpen) {
+  const el = document.getElementById('edit-profile-form');
+  if (!forceOpen && el.style.display === 'block') { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const needsSetup = needsProfileSetup();
+  el.innerHTML = `
+    ${needsSetup ? `<p class="hint" style="margin-bottom:14px;color:var(--gold);">Finish setting up your profile — choose a username and display name.</p>` : ''}
+    <div class="field">
+      <label>Display name</label>
+      <input type="text" id="edit-name" value="${escapeHtml(profileUser.display_name === 'User' ? '' : (profileUser.display_name || ''))}" placeholder="Your name" required>
+    </div>
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="edit-username" value="${escapeHtml((profileUser.username || '').startsWith('user_') ? '' : (profileUser.username || ''))}" placeholder="janesmith" pattern="[a-z0-9_]{3,30}" required>
+      <div class="hint">Lowercase letters, numbers, underscores. 3–30 characters.</div>
+      <div class="error" id="edit-username-error" style="display:none;"></div>
+    </div>
+    <div class="field">
+      <label>Bio</label>
+      <textarea id="edit-bio" rows="3">${escapeHtml(profileUser.bio || '')}</textarea>
+    </div>
+    <div class="image-upload-zone" id="avatar-upload-zone" style="margin-bottom:16px;">
+      <span>🖼 Click to update your avatar</span>
+      <input type="file" id="avatar-upload-input" accept="image/*" style="display:none;">
+    </div>
+    <button class="btn btn-primary btn-sm" id="save-profile-btn">Save changes</button>
+  `;
+  document.getElementById('avatar-upload-zone').addEventListener('click', () => document.getElementById('avatar-upload-input').click());
+  document.getElementById('avatar-upload-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const path = `${session.user.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+    const { error } = await supabase.storage.from('avatars').upload(path, file);
+    if (error) { toast('Upload failed', 'error'); return; }
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    await supabase.from('users').update({ avatar_url: data.publicUrl }).eq('id', session.user.id);
+    toast('Avatar updated');
+    window.location.reload();
+  });
+  document.getElementById('save-profile-btn').addEventListener('click', async () => {
+    const display_name = document.getElementById('edit-name').value.trim();
+    let username = document.getElementById('edit-username').value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const bio = document.getElementById('edit-bio').value.trim();
+    const errEl = document.getElementById('edit-username-error');
+    errEl.style.display = 'none';
+
+    if (!display_name) {
+      toast('Display name is required', 'error');
+      return;
+    }
+    if (!/^[a-z0-9_]{3,30}$/.test(username)) {
+      errEl.textContent = 'Username must be 3–30 lowercase letters, numbers, or underscores.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // Check username uniqueness (allow keeping own)
+    if (username !== profileUser.username) {
+      const { data: taken } = await supabase.from('users').select('id').eq('username', username).maybeSingle();
+      if (taken && taken.id !== session.user.id) {
+        errEl.textContent = 'That username is taken. Try another.';
+        errEl.style.display = 'block';
+        return;
+      }
+    }
+
+    const { error } = await supabase.from('users').update({ display_name, username, bio: bio || null }).eq('id', session.user.id);
+    if (error) { toast('Could not save: ' + error.message, 'error'); return; }
+
+    // Keep auth metadata in sync so ensureProfile stays correct
+    await supabase.auth.updateUser({ data: { username, display_name } });
+
+    toast('Profile updated');
+    window.location.href = `profile.html?u=${encodeURIComponent(username)}`;
+  });
+}
+
+function articleRowSmall(a) {
+  return `
+    <article class="article-row">
+      <div class="article-row-main">
+        ${a.category ? `<div class="kicker">${escapeHtml(a.category)}${a.status === 'draft' ? ' · Draft' : ''}</div>` : (a.status === 'draft' ? '<div class="kicker">Draft</div>' : '')}
+        <h2><a href="${a.status === 'draft' ? `editor.html?id=${a.id}` : `article.html?slug=${encodeURIComponent(a.slug)}`}">${escapeHtml(a.title)}</a></h2>
+        ${a.subtitle ? `<p class="dek">${escapeHtml(a.subtitle)}</p>` : ''}
+        <div class="byline">
+          <span>${formatDate(a.published_at || a.created_at)}</span>
+          <span>·</span>
+          <span>${a.reading_time_minutes || 1} min read</span>
+        </div>
+        <div class="article-row-stats">
+          <span>♥ ${a.like_count || 0}</span>
+          <span>💬 ${a.comment_count || 0}</span>
+        </div>
+      </div>
+    </article>`;
+}
+
+async function loadTab(tab) {
+  activeTab = tab;
+  const el = document.getElementById('tab-content');
+  el.innerHTML = `<div style="padding:30px 0;"><div class="skeleton" style="width:100%;height:80px;"></div></div>`;
+
+  if (tab === 'articles') {
+    const { data } = await supabase.from('articles').select('*').eq('author_id', profileUser.id).eq('status', 'published').order('published_at', { ascending: false });
+    renderList(data, 'No published articles yet.');
+  } else if (tab === 'drafts') {
+    const { data } = await supabase.from('articles').select('*').eq('author_id', profileUser.id).eq('status', 'draft').order('updated_at', { ascending: false });
+    renderList(data, 'No drafts.');
+  } else if (tab === 'bookmarks') {
+    const { data } = await supabase.from('bookmarks').select('articles(*)').eq('user_id', profileUser.id).order('created_at', { ascending: false });
+    renderList((data || []).map(d => d.articles).filter(Boolean), 'Nothing saved yet.');
+  }
+}
+
+function renderList(items, emptyMsg) {
+  const el = document.getElementById('tab-content');
+  if (!items || !items.length) {
+    el.innerHTML = `<div class="empty-state"><h3>${emptyMsg}</h3></div>`;
+    return;
+  }
+  el.innerHTML = items.map(articleRowSmall).join('');
+}
+</script>
+</body>
+</html>

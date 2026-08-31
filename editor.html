@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Write — Vequence</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="shell-narrow" style="padding-top:36px; padding-bottom:40px;">
+
+  <input type="text" class="title-input" id="title-input" placeholder="Article title" maxlength="255">
+  <input type="text" class="subtitle-input" id="subtitle-input" placeholder="Add a subtitle (optional)" maxlength="500">
+
+  <div class="image-upload-zone" id="hero-upload-zone" style="margin-bottom:26px;">
+    <span id="hero-upload-label">📷 Add a cover image (optional) — click to upload</span>
+    <input type="file" id="hero-upload-input" accept="image/*" style="display:none;">
+  </div>
+  <img id="hero-preview" style="display:none; border-radius:4px; margin-bottom:26px; max-height:280px; width:100%; object-fit:cover;">
+
+  <div class="field" style="max-width:280px;">
+    <label>Category</label>
+    <select id="category-select">
+      <option value="">Choose a category</option>
+      <option>Neuroscience</option>
+      <option>Technology</option>
+      <option>Health</option>
+      <option>Economics</option>
+      <option>Physics</option>
+      <option>Psychology</option>
+      <option>Climate</option>
+      <option>AI & ML</option>
+      <option>Other</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Tags</label>
+    <div class="chip-row" id="tags-display" style="margin-bottom:8px;"></div>
+    <input type="text" id="tag-input" placeholder="Type a tag and press Enter" maxlength="30">
+  </div>
+
+  <div class="section-label" style="margin-top:26px;">Article content</div>
+  <div class="editor-toolbar">
+    <button type="button" data-md="**" data-wrap>Bold</button>
+    <button type="button" data-md="*" data-wrap>Italic</button>
+    <button type="button" data-md="## " data-line>H2</button>
+    <button type="button" data-md="### " data-line>H3</button>
+    <button type="button" data-md="- " data-line>List</button>
+    <button type="button" data-md="1. " data-line>Numbered</button>
+    <button type="button" data-md="> " data-line>Quote</button>
+    <button type="button" data-md="`" data-wrap>Code</button>
+    <button type="button" id="codeblock-btn">Code block</button>
+    <button type="button" id="link-btn">Link</button>
+    <button type="button" id="image-btn">Image</button>
+    <input type="file" id="body-image-input" accept="image/*" style="display:none;">
+  </div>
+  <div class="editor-split">
+    <div class="editor-pane">
+      <textarea id="markdown-input" placeholder="Write in Markdown. Use ## for headings, **bold**, *italic*, &gt; quotes, ```code blocks```, and [^1] to cite a source below."></textarea>
+    </div>
+    <div class="editor-pane editor-preview">
+      <div class="article-body" id="markdown-preview"></div>
+    </div>
+  </div>
+  <p class="hint" style="margin-top:8px;" id="reading-time-hint">0 min read · 0 words</p>
+
+  <!-- Sources & Evidence -->
+  <div style="margin-top:44px;">
+    <div class="section-label">Sources & Evidence</div>
+    <p class="hint" style="margin-bottom:16px;">Cite what backs your claims. Reference a source in your text with <code>[^1]</code>, <code>[^2]</code>, etc. — matching the order below.</p>
+
+    <div class="field">
+      <label for="evidence-summary">Evidence summary (optional)</label>
+      <textarea id="evidence-summary" rows="3" placeholder="e.g. Reviewed 12 peer-reviewed studies investigating..."></textarea>
+    </div>
+
+    <div id="sources-list"></div>
+    <button type="button" class="btn btn-quiet btn-sm" id="add-source-btn">+ Add a source</button>
+  </div>
+
+  <div class="publish-bar">
+    <button class="btn btn-primary" id="publish-btn">Publish</button>
+    <button class="btn btn-quiet" id="draft-btn">Save draft</button>
+    <span id="save-status" class="hint"></span>
+  </div>
+
+</main>
+
+<template id="source-template">
+  <div class="source-card" data-source>
+    <button type="button" class="remove-source">Remove</button>
+    <div class="source-form-row">
+      <div class="field" style="margin-bottom:10px;">
+        <label>Type</label>
+        <select data-field="type">
+          <option value="paper">Paper</option>
+          <option value="book">Book</option>
+          <option value="dataset">Dataset</option>
+          <option value="website">Website</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Title</label>
+        <input type="text" data-field="title" placeholder="Study or resource title">
+      </div>
+    </div>
+    <div class="source-form-row">
+      <div class="field" style="margin-bottom:10px;">
+        <label>Year</label>
+        <input type="number" data-field="publication_year" placeholder="2023">
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Authors</label>
+        <input type="text" data-field="authors" placeholder="Smith, J., Johnson, M.">
+      </div>
+    </div>
+    <div class="source-form-row">
+      <div class="field" style="margin-bottom:10px;">
+        <label>DOI</label>
+        <input type="text" data-field="doi" placeholder="10.1234/example">
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>URL</label>
+        <input type="url" data-field="url" placeholder="https://...">
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:0;">
+      <label>Notes (why this source matters)</label>
+      <textarea data-field="notes" rows="2" placeholder="Key finding, relevance, or caveat..."></textarea>
+    </div>
+  </div>
+</template>
+
+<script type="module">
+import { supabase, requireAuth, initHeader, renderMarkdown, slugify, readingTime, toast, escapeHtml, ensureProfile } from './app.js';
+
+let session = null;
+let articleId = qsParam('id');
+let heroImageUrl = null;
+let tags = [];
+
+function qsParam(name) { return new URLSearchParams(window.location.search).get(name); }
+
+(async () => {
+  session = await requireAuth('auth.html');
+  if (!session) return;
+  // requireAuth already calls ensureProfile, but be explicit before any write
+  await ensureProfile(session);
+  await initHeader('write');
+  if (articleId) await loadExisting(articleId);
+})();
+
+// ---- Markdown live preview ----
+const mdInput = document.getElementById('markdown-input');
+const mdPreview = document.getElementById('markdown-preview');
+const readingHint = document.getElementById('reading-time-hint');
+
+function updatePreview() {
+  mdPreview.innerHTML = renderMarkdown(mdInput.value) || '<p style="color:var(--ink-faint)">Preview appears here as you write…</p>';
+  const words = mdInput.value.trim().split(/\s+/).filter(Boolean).length;
+  readingHint.textContent = `${readingTime(mdInput.value)} min read · ${words} words`;
+}
+mdInput.addEventListener('input', updatePreview);
+updatePreview();
+
+// ---- Toolbar ----
+function wrapSelection(marker) {
+  const start = mdInput.selectionStart, end = mdInput.selectionEnd;
+  const val = mdInput.value;
+  const selected = val.slice(start, end) || 'text';
+  mdInput.value = val.slice(0, start) + marker + selected + marker + val.slice(end);
+  mdInput.focus();
+  mdInput.selectionStart = start + marker.length;
+  mdInput.selectionEnd = start + marker.length + selected.length;
+  updatePreview();
+}
+function prefixLine(prefix) {
+  const start = mdInput.selectionStart;
+  const val = mdInput.value;
+  const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+  mdInput.value = val.slice(0, lineStart) + prefix + val.slice(lineStart);
+  mdInput.focus();
+  updatePreview();
+}
+document.querySelectorAll('.editor-toolbar [data-wrap]').forEach(btn =>
+  btn.addEventListener('click', () => wrapSelection(btn.dataset.md)));
+document.querySelectorAll('.editor-toolbar [data-line]').forEach(btn =>
+  btn.addEventListener('click', () => prefixLine(btn.dataset.md)));
+
+document.getElementById('codeblock-btn').addEventListener('click', () => {
+  const start = mdInput.selectionStart, end = mdInput.selectionEnd;
+  const val = mdInput.value;
+  const selected = val.slice(start, end) || 'code here';
+  mdInput.value = val.slice(0, start) + '```\n' + selected + '\n```' + val.slice(end);
+  updatePreview(); mdInput.focus();
+});
+document.getElementById('link-btn').addEventListener('click', () => {
+  const url = prompt('Link URL:'); if (!url) return;
+  const start = mdInput.selectionStart, end = mdInput.selectionEnd;
+  const val = mdInput.value;
+  const selected = val.slice(start, end) || 'link text';
+  mdInput.value = val.slice(0, start) + `[${selected}](${url})` + val.slice(end);
+  updatePreview(); mdInput.focus();
+});
+
+// ---- Body image upload ----
+document.getElementById('image-btn').addEventListener('click', () => document.getElementById('body-image-input').click());
+document.getElementById('body-image-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  toast('Uploading image…');
+  const path = `${session.user.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+  const { error } = await supabase.storage.from('articles').upload(path, file);
+  if (error) { toast('Upload failed: ' + error.message, 'error'); return; }
+  const { data } = supabase.storage.from('articles').getPublicUrl(path);
+  const start = mdInput.selectionStart;
+  const val = mdInput.value;
+  const insertion = `\n![${file.name}](${data.publicUrl})\n`;
+  mdInput.value = val.slice(0, start) + insertion + val.slice(start);
+  updatePreview();
+  toast('Image inserted');
+  e.target.value = '';
+});
+
+// ---- Hero image upload ----
+const heroZone = document.getElementById('hero-upload-zone');
+const heroInput = document.getElementById('hero-upload-input');
+const heroPreview = document.getElementById('hero-preview');
+heroZone.addEventListener('click', () => heroInput.click());
+heroInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('hero-upload-label').textContent = 'Uploading…';
+  const path = `${session.user.id}/hero-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+  const { error } = await supabase.storage.from('articles').upload(path, file);
+  if (error) { toast('Upload failed: ' + error.message, 'error'); document.getElementById('hero-upload-label').textContent = '📷 Add a cover image (optional) — click to upload'; return; }
+  const { data } = supabase.storage.from('articles').getPublicUrl(path);
+  heroImageUrl = data.publicUrl;
+  heroPreview.src = heroImageUrl;
+  heroPreview.style.display = 'block';
+  heroZone.style.display = 'none';
+  toast('Cover image set');
+});
+
+// ---- Tags ----
+const tagInput = document.getElementById('tag-input');
+const tagsDisplay = document.getElementById('tags-display');
+function renderTags() {
+  tagsDisplay.innerHTML = tags.map((t, i) =>
+    `<span class="chip active">#${escapeHtml(t)} <span class="chip-remove" data-i="${i}" style="cursor:pointer;">✕</span></span>`).join('');
+  tagsDisplay.querySelectorAll('.chip-remove').forEach(el =>
+    el.addEventListener('click', () => { tags.splice(+el.dataset.i, 1); renderTags(); }));
+}
+tagInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    // Strip leading #, title-case the hashtag, store as tag
+    let raw = tagInput.value.trim().replace(/^#+/, '');
+    if (!raw) return;
+    const label = raw.split(/[\s_-]+/).filter(Boolean).map(w =>
+      w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+    ).join(' ');
+    const key = label.toLowerCase();
+    if (key && !tags.map(t => t.toLowerCase()).includes(key) && tags.length < 8) {
+      tags.push(label);
+      renderTags();
+    }
+    tagInput.value = '';
+  }
+});
+
+// Live hint: show #Capitalized as user types
+tagInput.addEventListener('input', () => {
+  const v = tagInput.value;
+  if (v.startsWith('#') && v.length > 1) {
+    // keep # visible; formatting applied on Enter
+  }
+});
+
+// ---- Sources & Evidence ----
+const sourcesList = document.getElementById('sources-list');
+const sourceTemplate = document.getElementById('source-template');
+
+function addSourceCard(data = {}) {
+  const node = sourceTemplate.content.cloneNode(true);
+  const card = node.querySelector('[data-source]');
+  card.querySelector('[data-field="type"]').value = data.type || 'paper';
+  card.querySelector('[data-field="title"]').value = data.title || '';
+  card.querySelector('[data-field="publication_year"]').value = data.publication_year || '';
+  card.querySelector('[data-field="authors"]').value = (data.authors || []).join(', ') || data.authorsRaw || '';
+  card.querySelector('[data-field="doi"]').value = data.doi || '';
+  card.querySelector('[data-field="url"]').value = data.url || '';
+  card.querySelector('[data-field="notes"]').value = data.notes || '';
+  card.querySelector('.remove-source').addEventListener('click', () => card.remove());
+  sourcesList.appendChild(node);
+}
+document.getElementById('add-source-btn').addEventListener('click', () => addSourceCard());
+
+function collectSources() {
+  return Array.from(sourcesList.querySelectorAll('[data-source]')).map((card, i) => ({
+    type: card.querySelector('[data-field="type"]').value,
+    title: card.querySelector('[data-field="title"]').value.trim(),
+    publication_year: parseInt(card.querySelector('[data-field="publication_year"]').value) || null,
+    authors: card.querySelector('[data-field="authors"]').value.split(',').map(s => s.trim()).filter(Boolean),
+    doi: card.querySelector('[data-field="doi"]').value.trim() || null,
+    url: card.querySelector('[data-field="url"]').value.trim() || null,
+    notes: card.querySelector('[data-field="notes"]').value.trim() || null,
+    order_index: i
+  })).filter(s => s.title);
+}
+
+// ---- Load existing article (edit mode) ----
+async function loadExisting(id) {
+  const { data: article } = await supabase.from('articles').select('*, article_tags(tags(name)), sources(*)').eq('id', id).single();
+  if (!article) return;
+  document.getElementById('title-input').value = article.title || '';
+  document.getElementById('subtitle-input').value = article.subtitle || '';
+  document.getElementById('category-select').value = article.category || '';
+  mdInput.value = article.content?.markdown || '';
+  updatePreview();
+  document.getElementById('evidence-summary').value = article.evidence_summary || '';
+  if (article.hero_image_url) {
+    heroImageUrl = article.hero_image_url;
+    heroPreview.src = heroImageUrl; heroPreview.style.display = 'block'; heroZone.style.display = 'none';
+  }
+  tags = (article.article_tags || []).map(t => t.tags?.name).filter(Boolean);
+  renderTags();
+  (article.sources || []).sort((a, b) => a.order_index - b.order_index).forEach(s => addSourceCard(s));
+}
+
+// ---- Save / Publish ----
+async function ensureTagIds(tagNames) {
+  const ids = [];
+  for (const name of tagNames) {
+    const slug = slugify(name);
+    let { data: existing } = await supabase.from('tags').select('id').eq('slug', slug).maybeSingle();
+    if (!existing) {
+      const { data: created, error } = await supabase.from('tags').insert({ name, slug }).select('id').single();
+      if (error) continue;
+      existing = created;
+    }
+    ids.push(existing.id);
+  }
+  return ids;
+}
+
+async function saveArticle(status) {
+  const title = document.getElementById('title-input').value.trim();
+  if (!title) { toast('Give your article a title first', 'error'); return; }
+
+  // Critical: guarantee the public.users row exists so the FK on author_id succeeds
+  await ensureProfile(session);
+
+  const btn = status === 'published' ? document.getElementById('publish-btn') : document.getElementById('draft-btn');
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+
+  const subtitle = document.getElementById('subtitle-input').value.trim();
+  const category = document.getElementById('category-select').value;
+  const markdown = mdInput.value;
+  const evidenceSummary = document.getElementById('evidence-summary').value.trim();
+  const sources = collectSources();
+
+  const payload = {
+    author_id: session.user.id,
+    title,
+    subtitle: subtitle || null,
+    content: { markdown },
+    status,
+    category: category || null,
+    reading_time_minutes: readingTime(markdown),
+    evidence_summary: evidenceSummary || null,
+    hero_image_url: heroImageUrl
+  };
+
+  if (status === 'published') payload.published_at = new Date().toISOString();
+
+  let savedId = articleId;
+
+  try {
+    if (!savedId) {
+      payload.slug = slugify(title) + '-' + Math.random().toString(36).slice(2, 7);
+      const { data, error } = await supabase.from('articles').insert(payload).select('id').single();
+      if (error) throw error;
+      savedId = data.id;
+      articleId = savedId;
+    } else {
+      const { error } = await supabase.from('articles').update(payload).eq('id', savedId);
+      if (error) throw error;
+    }
+
+    // Replace sources
+    await supabase.from('sources').delete().eq('article_id', savedId);
+    if (sources.length) {
+      await supabase.from('sources').insert(sources.map(s => ({ ...s, article_id: savedId })));
+    }
+
+    // Replace tags
+    await supabase.from('article_tags').delete().eq('article_id', savedId);
+    if (tags.length) {
+      const tagIds = await ensureTagIds(tags);
+      await supabase.from('article_tags').insert(tagIds.map(tid => ({ article_id: savedId, tag_id: tid })));
+    }
+
+    document.getElementById('save-status').textContent = status === 'published' ? 'Published!' : 'Draft saved';
+    toast(status === 'published' ? 'Article published' : 'Draft saved');
+
+    if (status === 'published') {
+      const { data: a } = await supabase.from('articles').select('slug').eq('id', savedId).single();
+      setTimeout(() => window.location.href = `article.html?slug=${encodeURIComponent(a.slug)}`, 600);
+    }
+  } catch (err) {
+    toast('Could not save: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
+
+document.getElementById('publish-btn').addEventListener('click', () => saveArticle('published'));
+document.getElementById('draft-btn').addEventListener('click', () => saveArticle('draft'));
+</script>
+</body>
+</html>

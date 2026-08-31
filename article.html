@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vequence</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="shell-narrow" id="article-root">
+  <div style="padding-top:60px;">
+    <div class="skeleton" style="width:140px;height:14px;margin-bottom:18px;"></div>
+    <div class="skeleton" style="width:90%;height:42px;margin-bottom:14px;"></div>
+    <div class="skeleton" style="width:60%;height:24px;margin-bottom:30px;"></div>
+  </div>
+</main>
+
+<div class="shell-narrow" id="related-root"></div>
+<div class="shell-narrow" id="comments-root"></div>
+
+<footer id="site-footer"></footer>
+
+<script type="module">
+import {
+  supabase, initHeader, initFooter, getSession, getCurrentProfile,
+  renderMarkdown, escapeHtml, formatDate, timeAgo, avatarHtml, toast
+} from './app.js';
+
+const slug = new URLSearchParams(window.location.search).get('slug');
+const root = document.getElementById('article-root');
+const relatedRoot = document.getElementById('related-root');
+const commentsRoot = document.getElementById('comments-root');
+
+let session, myProfile, article, iLiked = false, iBookmarked = false;
+
+(async () => {
+  const headerInfo = await initHeader();
+  session = headerInfo.session;
+  myProfile = headerInfo.profile;
+  initFooter();
+
+  if (!slug) { showNotFound(); return; }
+
+  const { data, error } = await supabase
+    .from('articles')
+    .select('*, users(id, username, display_name, avatar_url, bio), article_tags(tags(id, name, slug)), sources(*)')
+    .eq('slug', slug)
+    .single();
+
+  if (error || !data) { showNotFound(); return; }
+  article = data;
+
+  if (article.status !== 'published' && (!session || session.user.id !== article.author_id)) {
+    showNotFound(); return;
+  }
+
+  // fire-and-forget view count
+  supabase.from('articles').update({ view_count: (article.view_count || 0) + 1 }).eq('id', article.id).then(() => {});
+
+  if (session) {
+    const [{ data: like }, { data: bm }] = await Promise.all([
+      supabase.from('likes').select('id').eq('user_id', session.user.id).eq('article_id', article.id).maybeSingle(),
+      supabase.from('bookmarks').select('id').eq('user_id', session.user.id).eq('article_id', article.id).maybeSingle()
+    ]);
+    iLiked = !!like;
+    iBookmarked = !!bm;
+  }
+
+  renderArticle();
+  loadRelated();
+  loadComments();
+})();
+
+function showNotFound() {
+  root.innerHTML = `<div class="empty-state" style="padding-top:100px;"><h3>Article not found</h3><p>It may have been unpublished or the link is incorrect.</p><a href="index.html" class="btn btn-outline" style="margin-top:16px;">Back to Discover</a></div>`;
+}
+
+function heartIcon(filled) {
+  return filled
+    ? `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.3-8.1C1 10.1 1.6 6.6 4.6 5.1c2.3-1.2 4.8-.3 6.1 1.6l1.3 1.9 1.3-1.9c1.3-1.9 3.8-2.8 6.1-1.6 3 1.5 3.6 5 1.9 7.8C18.7 16.65 12 21 12 21z"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-6.7-4.35-9.3-8.1C1 10.1 1.6 6.6 4.6 5.1c2.3-1.2 4.8-.3 6.1 1.6l1.3 1.9 1.3-1.9c1.3-1.9 3.8-2.8 6.1-1.6 3 1.5 3.6 5 1.9 7.8C18.7 16.65 12 21 12 21z"/></svg>`;
+}
+function bookmarkIcon(filled) {
+  return filled
+    ? `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>`;
+}
+
+function sourceTypeLabel(t) {
+  return { paper: 'Paper', book: 'Book', dataset: 'Dataset', website: 'Website', other: 'Source' }[t] || 'Source';
+}
+
+function evidencePanel() {
+  const sources = (article.sources || []).sort((a, b) => a.order_index - b.order_index);
+  if (!sources.length && !article.evidence_summary) return '';
+  return `
+    <div class="evidence-panel">
+      <div class="evidence-head">
+        <h3>Sources &amp; Evidence</h3>
+        ${sources.length ? `<span class="evidence-count">${sources.length} source${sources.length > 1 ? 's' : ''}</span>` : ''}
+      </div>
+      ${article.evidence_summary ? `<p class="evidence-summary">${escapeHtml(article.evidence_summary)}</p>` : ''}
+      ${sources.map((s, i) => `
+        <div class="source-item" id="source-${i + 1}">
+          <div class="source-num">${i + 1}.</div>
+          <div class="source-body">
+            <span class="source-type">${sourceTypeLabel(s.type)}</span>
+            <div class="source-title">${s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.title)}</a>` : escapeHtml(s.title)}</div>
+            <div>
+              ${s.authors?.length ? `<span class="source-authors">${escapeHtml(s.authors.join(', '))}</span>` : ''}
+              ${s.publication_year ? `<span class="source-year"> · ${s.publication_year}</span>` : ''}
+              ${s.doi ? `<span class="source-year"> · DOI: ${escapeHtml(s.doi)}</span>` : ''}
+            </div>
+            ${s.notes ? `<div class="source-notes">${escapeHtml(s.notes)}</div>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function renderArticle() {
+  const author = article.users;
+  const tags = (article.article_tags || []).map(t => t.tags).filter(Boolean);
+  const isOwner = session && session.user.id === article.author_id;
+
+  root.innerHTML = `
+    <div class="article-header">
+      ${article.category ? `<div class="kicker">${escapeHtml(article.category)}</div>` : ''}
+      <h1>${escapeHtml(article.title)}</h1>
+      ${article.subtitle ? `<p class="subtitle">${escapeHtml(article.subtitle)}</p>` : ''}
+
+      <div class="article-meta-row">
+        <div class="article-meta-author">
+          ${avatarHtml(author, 42)}
+          <div>
+            <div class="name"><a href="profile.html?u=${encodeURIComponent(author?.username || '')}">${escapeHtml(author?.display_name || author?.username || 'Unknown')}</a></div>
+            <div class="sub">${formatDate(article.published_at || article.created_at)} · ${article.reading_time_minutes || 1} min read · ${article.view_count || 0} views</div>
+          </div>
+        </div>
+        <div class="article-actions">
+          ${isOwner ? `<a href="editor.html?id=${article.id}" class="btn btn-quiet btn-sm">Edit</a>` : ''}
+          <button class="icon-btn ${iLiked ? 'active' : ''}" id="like-btn">${heartIcon(iLiked)} <span id="like-count">${article.like_count || 0}</span></button>
+          <button class="icon-btn ${iBookmarked ? 'active' : ''}" id="bookmark-btn">${bookmarkIcon(iBookmarked)}</button>
+        </div>
+      </div>
+    </div>
+
+    ${article.hero_image_url ? `<img src="${escapeHtml(article.hero_image_url)}" style="width:100%;border-radius:4px;margin-bottom:8px;" alt="">` : ''}
+
+    <div class="article-body">${renderMarkdown(article.content?.markdown || '')}</div>
+
+    ${evidencePanel()}
+
+    ${tags.length ? `<div class="chip-row" style="margin-bottom:40px;">${tags.map(t => `<a href="index.html?q=${encodeURIComponent(t.name)}" class="chip">${escapeHtml(t.name)}</a>`).join('')}</div>` : ''}
+  `;
+
+  document.getElementById('like-btn').addEventListener('click', toggleLike);
+  document.getElementById('bookmark-btn').addEventListener('click', toggleBookmark);
+}
+
+async function toggleLike() {
+  if (!session) { window.location.href = `auth.html?next=${encodeURIComponent(window.location.href)}`; return; }
+  const btn = document.getElementById('like-btn');
+  const countEl = document.getElementById('like-count');
+  if (iLiked) {
+    await supabase.from('likes').delete().eq('user_id', session.user.id).eq('article_id', article.id);
+    iLiked = false;
+    article.like_count = Math.max((article.like_count || 1) - 1, 0);
+  } else {
+    await supabase.from('likes').insert({ user_id: session.user.id, article_id: article.id });
+    iLiked = true;
+    article.like_count = (article.like_count || 0) + 1;
+  }
+  btn.classList.toggle('active', iLiked);
+  btn.innerHTML = `${heartIcon(iLiked)} <span id="like-count">${article.like_count}</span>`;
+}
+
+async function toggleBookmark() {
+  if (!session) { window.location.href = `auth.html?next=${encodeURIComponent(window.location.href)}`; return; }
+  const btn = document.getElementById('bookmark-btn');
+  if (iBookmarked) {
+    await supabase.from('bookmarks').delete().eq('user_id', session.user.id).eq('article_id', article.id);
+    iBookmarked = false;
+    toast('Removed from saved');
+  } else {
+    await supabase.from('bookmarks').insert({ user_id: session.user.id, article_id: article.id });
+    iBookmarked = true;
+    toast('Saved to your bookmarks');
+  }
+  btn.classList.toggle('active', iBookmarked);
+  btn.innerHTML = bookmarkIcon(iBookmarked);
+}
+
+// ---- Related articles ----
+async function loadRelated() {
+  const tagIds = (article.article_tags || []).map(t => t.tags?.id).filter(Boolean);
+  let related = [];
+  if (tagIds.length) {
+    const { data } = await supabase
+      .from('article_tags')
+      .select('articles(*, users(username, display_name, avatar_url))')
+      .in('tag_id', tagIds)
+      .neq('article_id', article.id)
+      .limit(12);
+    const seen = new Set();
+    for (const row of data || []) {
+      const a = row.articles;
+      if (a && a.status === 'published' && !seen.has(a.id)) { seen.add(a.id); related.push(a); }
+    }
+  }
+  if (related.length < 3) {
+    const { data } = await supabase.from('articles').select('*, users(username, display_name, avatar_url)')
+      .eq('status', 'published').eq('category', article.category || '').neq('id', article.id).limit(3);
+    for (const a of data || []) if (!related.find(r => r.id === a.id)) related.push(a);
+  }
+  related = related.slice(0, 3);
+  if (!related.length) return;
+
+  relatedRoot.innerHTML = `
+    <div class="section-label" style="margin-top:20px;">Related research</div>
+    <div class="related-grid">
+      ${related.map(a => `
+        <a href="article.html?slug=${encodeURIComponent(a.slug)}" class="related-card">
+          <h4>${escapeHtml(a.title)}</h4>
+          <div class="byline">${avatarHtml(a.users, 18)} <span>${escapeHtml(a.users?.display_name || a.users?.username || '')}</span></div>
+        </a>
+      `).join('')}
+    </div>`;
+}
+
+// ---- Comments ----
+async function loadComments() {
+  const { data } = await supabase
+    .from('comments')
+    .select('*, users(username, display_name, avatar_url)')
+    .eq('article_id', article.id)
+    .order('created_at', { ascending: true });
+
+  const all = data || [];
+  const top = all.filter(c => !c.parent_comment_id);
+  const repliesOf = (id) => all.filter(c => c.parent_comment_id === id);
+
+  function commentHtml(c, depth = 0) {
+    const isMine = session && session.user.id === c.user_id;
+    return `
+      <div class="comment" data-id="${c.id}">
+        ${avatarHtml(c.users, 34)}
+        <div class="comment-body">
+          <div class="comment-head">
+            <span class="comment-author">${escapeHtml(c.users?.display_name || c.users?.username || 'Unknown')}</span>
+            ${c.is_pinned ? '<span class="pinned-badge">Pinned</span>' : ''}
+            <span class="comment-time">${timeAgo(c.created_at)}</span>
+          </div>
+          <div class="comment-text">${escapeHtml(c.content)}</div>
+          <div class="comment-actions">
+            ${session ? `<button class="reply-btn" data-id="${c.id}">Reply</button>` : ''}
+            ${isMine ? `<button class="delete-btn" data-id="${c.id}">Delete</button>` : ''}
+            ${(session && session.user.id === article.author_id && !c.is_pinned) ? `<button class="pin-btn" data-id="${c.id}">Pin</button>` : ''}
+          </div>
+          <div class="reply-form-slot" data-slot="${c.id}"></div>
+          <div class="comment-replies">${repliesOf(c.id).map(r => commentHtml(r, depth + 1)).join('')}</div>
+        </div>
+      </div>`;
+  }
+
+  commentsRoot.innerHTML = `
+    <div class="comments-section">
+      <div class="section-label" style="margin-top:20px;">Discussion (${all.length})</div>
+      ${session ? `
+        <form class="comment-form" id="top-comment-form">
+          ${avatarHtml(myProfile, 38)}
+          <textarea placeholder="Add to the discussion..." id="top-comment-text"></textarea>
+          <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Post</button>
+        </form>
+      ` : `<p class="hint" style="padding:16px 0;"><a href="auth.html?next=${encodeURIComponent(window.location.href)}" style="color:var(--evergreen-dark);font-weight:600;">Sign in</a> to join the discussion.</p>`}
+      <div id="comment-list">
+        ${top.length ? top.sort((a, b) => (b.is_pinned - a.is_pinned)).map(c => commentHtml(c)).join('') : '<div class="empty-state" style="padding:40px 0;"><p>No comments yet — be the first to weigh in.</p></div>'}
+      </div>
+    </div>`;
+
+  const topForm = document.getElementById('top-comment-form');
+  if (topForm) topForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = document.getElementById('top-comment-text').value.trim();
+    if (!text) return;
+    const { error } = await supabase.from('comments').insert({ article_id: article.id, user_id: session.user.id, content: text });
+    if (error) { toast('Could not post comment', 'error'); return; }
+    document.getElementById('top-comment-text').value = '';
+    loadComments();
+  });
+
+  commentsRoot.querySelectorAll('.reply-btn').forEach(btn => btn.addEventListener('click', () => {
+    const slot = commentsRoot.querySelector(`.reply-form-slot[data-slot="${btn.dataset.id}"]`);
+    if (slot.innerHTML) { slot.innerHTML = ''; return; }
+    slot.innerHTML = `
+      <form class="comment-form" style="padding:10px 0;">
+        <textarea placeholder="Write a reply..." style="min-height:44px;"></textarea>
+        <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Reply</button>
+      </form>`;
+    const form = slot.querySelector('form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = form.querySelector('textarea').value.trim();
+      if (!text) return;
+      await supabase.from('comments').insert({ article_id: article.id, user_id: session.user.id, content: text, parent_comment_id: btn.dataset.id });
+      loadComments();
+    });
+  }));
+
+  commentsRoot.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this comment?')) return;
+    await supabase.from('comments').delete().eq('id', btn.dataset.id);
+    loadComments();
+  }));
+
+  commentsRoot.querySelectorAll('.pin-btn').forEach(btn => btn.addEventListener('click', async () => {
+    await supabase.from('comments').update({ is_pinned: true }).eq('id', btn.dataset.id);
+    loadComments();
+  }));
+}
+</script>
+</body>
+</html>

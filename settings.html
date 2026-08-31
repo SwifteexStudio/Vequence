@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings — Vequence</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="shell-narrow" style="padding-top:40px;padding-bottom:60px;">
+  <h1 class="page-title">Settings</h1>
+  <p class="page-sub">Account, security, and appearance.</p>
+
+  <section class="settings-section">
+    <h2 class="section-label">Appearance</h2>
+    <p class="hint" style="margin-bottom:14px;">Choose a theme. It applies across the whole site.</p>
+    <div class="theme-grid" id="theme-grid">
+      <button type="button" class="theme-card" data-theme="light">
+        <span class="theme-swatch theme-swatch-light"></span>
+        <span class="theme-name">Light</span>
+        <span class="theme-desc">Clean paper & evergreen</span>
+      </button>
+      <button type="button" class="theme-card" data-theme="warm">
+        <span class="theme-swatch theme-swatch-warm"></span>
+        <span class="theme-name">Warm</span>
+        <span class="theme-desc">Soft parchment & amber</span>
+      </button>
+      <button type="button" class="theme-card" data-theme="dark">
+        <span class="theme-swatch theme-swatch-dark"></span>
+        <span class="theme-name">Dark</span>
+        <span class="theme-desc">Low-light reading</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="settings-section">
+    <h2 class="section-label">Email</h2>
+    <div class="field">
+      <label for="settings-email">Account email</label>
+      <input type="email" id="settings-email" autocomplete="email">
+      <div class="hint">Changing email may require confirmation in your inbox.</div>
+      <div class="error" id="email-error" style="display:none;"></div>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" id="save-email-btn">Update email</button>
+  </section>
+
+  <section class="settings-section">
+    <h2 class="section-label">Password</h2>
+    <div class="field">
+      <label for="current-password">Current password</label>
+      <input type="password" id="current-password" autocomplete="current-password" required>
+    </div>
+    <div class="field">
+      <label for="new-password">New password</label>
+      <input type="password" id="new-password" minlength="8" autocomplete="new-password">
+      <div class="hint">At least 8 characters with one capital letter.</div>
+    </div>
+    <div class="field">
+      <label for="new-password2">Confirm new password</label>
+      <input type="password" id="new-password2" minlength="8" autocomplete="new-password">
+      <div class="error" id="password-error" style="display:none;"></div>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" id="save-password-btn">Update password</button>
+  </section>
+
+  <section class="settings-section">
+    <h2 class="section-label">Interests</h2>
+    <p class="hint" style="margin-bottom:12px;">Used to personalize Discover.</p>
+    <div class="chip-row" id="settings-interests"></div>
+    <button type="button" class="btn btn-quiet btn-sm" id="save-interests-btn" style="margin-top:14px;">Save interests</button>
+  </section>
+
+  <section class="settings-section">
+    <h2 class="section-label">Session</h2>
+    <button type="button" class="btn btn-quiet btn-sm" id="signout-btn">Sign out</button>
+  </section>
+
+  <section class="settings-section danger-zone">
+    <h2 class="section-label" style="color:var(--red);">Danger zone</h2>
+    <p class="hint" style="margin-bottom:16px;">Deleting your account permanently removes your profile, articles, comments, and saved items. This cannot be undone.</p>
+
+    <div id="delete-account-panel" style="display:none;">
+      <div class="field">
+        <label for="delete-username">Type your username <strong id="delete-username-label"></strong> to confirm</label>
+        <input type="text" id="delete-username" autocomplete="off" placeholder="your username">
+      </div>
+      <div class="field">
+        <label for="delete-password">Your password</label>
+        <input type="password" id="delete-password" autocomplete="current-password">
+        <div class="error" id="delete-error" style="display:none;"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-danger btn-sm" id="confirm-delete-btn">Permanently delete account</button>
+        <button type="button" class="btn btn-quiet btn-sm" id="cancel-delete-btn">Cancel</button>
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-danger btn-sm" id="show-delete-btn">Delete account</button>
+  </section>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script type="module">
+import {
+  supabase, requireAuth, initHeader, initFooter, toast, signOut,
+  applyTheme, getTheme, INTEREST_TOPICS, escapeHtml, getCurrentProfile
+} from './app.js';
+
+const session = await requireAuth('auth.html');
+if (!session) throw new Error('redirect');
+
+await initHeader('settings');
+initFooter();
+
+const profile = await getCurrentProfile();
+const myUsername = profile?.username || '';
+const myEmail = session.user.email || '';
+
+// ---- Theme ----
+function markActiveTheme() {
+  const current = getTheme();
+  document.querySelectorAll('.theme-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.theme === current);
+  });
+}
+markActiveTheme();
+document.getElementById('theme-grid').addEventListener('click', (e) => {
+  const card = e.target.closest('.theme-card');
+  if (!card) return;
+  applyTheme(card.dataset.theme);
+  markActiveTheme();
+  toast(`Theme: ${card.dataset.theme}`);
+});
+
+// ---- Email ----
+document.getElementById('settings-email').value = myEmail;
+document.getElementById('save-email-btn').addEventListener('click', async () => {
+  const email = document.getElementById('settings-email').value.trim();
+  const errEl = document.getElementById('email-error');
+  errEl.style.display = 'none';
+  if (!email) return;
+  const { error } = await supabase.auth.updateUser({ email });
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  toast('Check your inbox to confirm the new email');
+});
+
+// ---- Password (requires current password) ----
+function validatePassword(pw) {
+  if (pw.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(pw)) return 'Password must include at least one capital letter.';
+  return null;
+}
+
+document.getElementById('save-password-btn').addEventListener('click', async () => {
+  const current = document.getElementById('current-password').value;
+  const pw = document.getElementById('new-password').value;
+  const pw2 = document.getElementById('new-password2').value;
+  const errEl = document.getElementById('password-error');
+  errEl.style.display = 'none';
+
+  if (!current) {
+    errEl.textContent = 'Enter your current password.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const err = validatePassword(pw);
+  if (err) { errEl.textContent = err; errEl.style.display = 'block'; return; }
+  if (pw !== pw2) { errEl.textContent = 'New passwords do not match.'; errEl.style.display = 'block'; return; }
+  if (pw === current) {
+    errEl.textContent = 'New password must be different from the current one.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('save-password-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  // Verify current password by re-authenticating
+  const { error: authErr } = await supabase.auth.signInWithPassword({
+    email: myEmail,
+    password: current
+  });
+  if (authErr) {
+    btn.disabled = false;
+    btn.textContent = 'Update password';
+    errEl.textContent = 'Current password is incorrect.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: pw });
+  btn.disabled = false;
+  btn.textContent = 'Update password';
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  document.getElementById('current-password').value = '';
+  document.getElementById('new-password').value = '';
+  document.getElementById('new-password2').value = '';
+  toast('Password updated');
+});
+
+// ---- Interests ----
+let selected = [];
+try {
+  selected = JSON.parse(localStorage.getItem('vequence-interests') || '[]');
+} catch (_) {}
+const metaInterests = session.user.user_metadata?.interests;
+if (Array.isArray(metaInterests) && metaInterests.length) selected = metaInterests;
+
+const chipsEl = document.getElementById('settings-interests');
+function renderInterestChips() {
+  chipsEl.innerHTML = INTEREST_TOPICS.map(t =>
+    `<button type="button" class="chip ${selected.includes(t) ? 'active' : ''}" data-topic="${escapeHtml(t)}">${escapeHtml(t)}</button>`
+  ).join('');
+  chipsEl.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const t = chip.dataset.topic;
+      if (selected.includes(t)) selected = selected.filter(x => x !== t);
+      else selected.push(t);
+      renderInterestChips();
+    });
+  });
+}
+renderInterestChips();
+
+document.getElementById('save-interests-btn').addEventListener('click', async () => {
+  localStorage.setItem('vequence-interests', JSON.stringify(selected));
+  await supabase.auth.updateUser({ data: { interests: selected } });
+  toast('Interests saved');
+});
+
+document.getElementById('signout-btn').addEventListener('click', signOut);
+
+// ---- Delete account ----
+const showDeleteBtn = document.getElementById('show-delete-btn');
+const deletePanel = document.getElementById('delete-account-panel');
+document.getElementById('delete-username-label').textContent = myUsername ? `“${myUsername}”` : '';
+
+showDeleteBtn.addEventListener('click', () => {
+  deletePanel.style.display = 'block';
+  showDeleteBtn.style.display = 'none';
+  document.getElementById('delete-username').focus();
+});
+
+document.getElementById('cancel-delete-btn').addEventListener('click', () => {
+  deletePanel.style.display = 'none';
+  showDeleteBtn.style.display = 'inline-flex';
+  document.getElementById('delete-username').value = '';
+  document.getElementById('delete-password').value = '';
+  document.getElementById('delete-error').style.display = 'none';
+});
+
+document.getElementById('confirm-delete-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('delete-error');
+  errEl.style.display = 'none';
+
+  const typedUser = document.getElementById('delete-username').value.trim();
+  const password = document.getElementById('delete-password').value;
+  const btn = document.getElementById('confirm-delete-btn');
+
+  if (!myUsername) {
+    errEl.textContent = 'Could not load your username. Refresh and try again.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (typedUser !== myUsername) {
+    errEl.textContent = 'Username does not match. Type it exactly to confirm.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!password) {
+    errEl.textContent = 'Enter your password to continue.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  // Verify password
+  const { error: authErr } = await supabase.auth.signInWithPassword({
+    email: myEmail,
+    password
+  });
+  if (authErr) {
+    btn.disabled = false;
+    btn.textContent = 'Permanently delete account';
+    errEl.textContent = 'Password is incorrect.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const uid = session.user.id;
+
+  try {
+    // Wipe public data owned by this user (order matters for FKs)
+    const { data: myArticles } = await supabase.from('articles').select('id').eq('author_id', uid);
+    const articleIds = (myArticles || []).map(a => a.id);
+
+    if (articleIds.length) {
+      await supabase.from('sources').delete().in('article_id', articleIds);
+      await supabase.from('article_tags').delete().in('article_id', articleIds);
+      await supabase.from('likes').delete().in('article_id', articleIds);
+      await supabase.from('bookmarks').delete().in('article_id', articleIds);
+      await supabase.from('comments').delete().in('article_id', articleIds);
+      await supabase.from('articles').delete().eq('author_id', uid);
+    }
+
+    await supabase.from('likes').delete().eq('user_id', uid);
+    await supabase.from('bookmarks').delete().eq('user_id', uid);
+    await supabase.from('comments').delete().eq('user_id', uid);
+    await supabase.from('follows').delete().eq('follower_id', uid);
+    await supabase.from('follows').delete().eq('followed_id', uid);
+    await supabase.from('users').delete().eq('id', uid);
+
+    // Try RPC if project has a secure delete_own_account function (optional)
+    try {
+      await supabase.rpc('delete_own_account');
+    } catch (_) { /* optional */ }
+
+    localStorage.removeItem('vequence-interests');
+    await supabase.auth.signOut();
+
+    toast('Account deleted');
+    setTimeout(() => { window.location.href = 'auth.html'; }, 600);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Permanently delete account';
+    errEl.textContent = e.message || 'Could not delete account. Try again.';
+    errEl.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>
