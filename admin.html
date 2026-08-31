@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Vequence</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header id="site-header"></header>
+<main class="shell" style="padding-top:38px;padding-bottom:60px;">
+  <div class="admin-heading">
+    <div>
+      <div class="kicker">Administration</div>
+      <h1 class="page-title">Moderation console</h1>
+      <p class="page-sub">Manage articles, users and comments. Every action is verified by Supabase.</p>
+    </div>
+  </div>
+
+  <section class="admin-stats" id="admin-stats"></section>
+
+  <div class="admin-grid">
+    <section class="admin-card">
+      <div class="admin-card-head"><div><h2>Articles</h2><p>Find by Article ID, title, slug or author.</p></div></div>
+      <div class="admin-toolbar">
+        <input id="article-search" placeholder="ART-XXXXXXXXXX or title…">
+        <select id="article-status"><option value="">All statuses</option><option value="published">Published</option><option value="draft">Draft</option></select>
+        <button class="btn btn-primary btn-sm" id="article-search-btn">Search</button>
+      </div>
+      <div id="articles-list"></div>
+    </section>
+
+    <section class="admin-card">
+      <div class="admin-card-head"><div><h2>Users</h2><p>Promote moderators or ban accounts.</p></div></div>
+      <div class="admin-toolbar">
+        <input id="user-search" placeholder="Username or display name…">
+        <button class="btn btn-primary btn-sm" id="user-search-btn">Search</button>
+      </div>
+      <div id="users-list"></div>
+    </section>
+  </div>
+
+  <section class="admin-card" style="margin-top:20px;">
+    <div class="admin-card-head"><div><h2>Comments</h2><p>Search and remove comments that violate your rules.</p></div></div>
+    <div class="admin-toolbar">
+      <input id="comment-search" placeholder="Comment text, username or Article ID…">
+      <button class="btn btn-primary btn-sm" id="comment-search-btn">Search</button>
+    </div>
+    <div id="comments-list"></div>
+  </section>
+</main>
+<footer id="site-footer"></footer>
+
+<script type="module">
+import { supabase, requireAdmin, initHeader, initFooter, escapeHtml, formatDate, toast } from './app.js';
+
+let session;
+
+(async () => {
+  session = await requireAdmin('auth.html');
+  if (!session) return;
+  await initHeader();
+  initFooter();
+  await Promise.all([loadDashboard(), loadArticles(), loadUsers(), loadComments()]);
+})();
+
+async function rpc(name, args = {}) {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) { toast(error.message, 'error'); throw error; }
+  return data;
+}
+
+async function loadDashboard() {
+  try {
+    const d = await rpc('admin_dashboard');
+    document.getElementById('admin-stats').innerHTML = [
+      ['Users', d.users], ['Banned', d.banned_users], ['Admins', d.admins],
+      ['Articles', d.articles], ['Published', d.published_articles], ['Drafts', d.draft_articles], ['Comments', d.comments]
+    ].map(([label, value]) => `<div class="admin-stat"><strong>${value}</strong><span>${label}</span></div>`).join('');
+  } catch (_) {}
+}
+
+async function loadArticles() {
+  const search = document.getElementById('article-search').value.trim() || null;
+  const status = document.getElementById('article-status').value || null;
+  let rows;
+  try { rows = await rpc('admin_find_articles', { p_search: search, p_status: status }); } catch (_) { return; }
+  const el = document.getElementById('articles-list');
+  if (!rows?.length) { el.innerHTML = `<div class="admin-empty">No articles found.</div>`; return; }
+  el.innerHTML = rows.map(a => `
+    <div class="admin-row">
+      <div class="admin-row-main">
+        <div class="admin-id">${escapeHtml(a.article_code)}</div>
+        <h3>${escapeHtml(a.title)}</h3>
+        <div class="admin-meta">${escapeHtml(a.author_display_name || a.author_username)} · ${escapeHtml(a.status || 'unknown')} · ${formatDate(a.created_at)} · ${a.like_count || 0} likes · ${a.comment_count || 0} comments</div>
+      </div>
+      <div class="admin-actions">
+        <a class="btn btn-quiet btn-sm" href="article.html?slug=${encodeURIComponent(a.slug)}" target="_blank">View</a>
+        ${a.status === 'published' ? `<button class="btn btn-quiet btn-sm" data-action="unpublish" data-code="${escapeHtml(a.article_code)}">Unpublish</button>` : `<button class="btn btn-quiet btn-sm" data-action="publish" data-code="${escapeHtml(a.article_code)}">Publish</button>`}
+        <button class="btn btn-danger btn-sm" data-action="delete-article" data-code="${escapeHtml(a.article_code)}">Remove</button>
+      </div>
+    </div>`).join('');
+
+  el.querySelectorAll('[data-action="delete-article"]').forEach(btn => btn.addEventListener('click', async () => {
+    const code = btn.dataset.code;
+    if (!confirm(`Permanently remove article ${code}? This also removes its sources, tags, likes, bookmarks and comments.`)) return;
+    try { await rpc('admin_delete_article', { p_article_ref: code }); toast(`${code} removed`); await refresh(); } catch (_) {}
+  }));
+  el.querySelectorAll('[data-action="publish"],[data-action="unpublish"]').forEach(btn => btn.addEventListener('click', async () => {
+    const status = btn.dataset.action === 'publish' ? 'published' : 'draft';
+    try { await rpc('admin_set_article_status', { p_article_ref: btn.dataset.code, p_status: status }); toast(status === 'published' ? 'Article published' : 'Article unpublished'); await refresh(); } catch (_) {}
+  }));
+}
+
+async function loadUsers() {
+  const search = document.getElementById('user-search').value.trim() || null;
+  let rows;
+  try { rows = await rpc('admin_find_users', { p_search: search }); } catch (_) { return; }
+  const el = document.getElementById('users-list');
+  if (!rows?.length) { el.innerHTML = `<div class="admin-empty">No users found.</div>`; return; }
+  el.innerHTML = rows.map(u => `
+    <div class="admin-row">
+      <div class="admin-row-main">
+        <div><strong>@${escapeHtml(u.username)}</strong> ${u.is_admin ? '<span class="admin-badge">ADMIN</span>' : ''} ${u.banned_at ? '<span class="ban-badge">BANNED</span>' : ''}</div>
+        <div class="admin-meta">${escapeHtml(u.display_name || '')} · ${u.article_count} articles · joined ${formatDate(u.created_at)}</div>
+        ${u.banned_at && u.ban_reason ? `<div class="admin-ban-reason">Reason: ${escapeHtml(u.ban_reason)}</div>` : ''}
+      </div>
+      <div class="admin-actions">
+        ${u.is_admin ? `<button class="btn btn-quiet btn-sm" data-user-admin="false" data-username="${escapeHtml(u.username)}">Remove admin</button>` : `<button class="btn btn-quiet btn-sm" data-user-admin="true" data-username="${escapeHtml(u.username)}">Make admin</button>`}
+        ${u.banned_at ? `<button class="btn btn-quiet btn-sm" data-user-ban="false" data-username="${escapeHtml(u.username)}">Unban</button>` : `<button class="btn btn-danger btn-sm" data-user-ban="true" data-username="${escapeHtml(u.username)}">Ban</button>`}
+      </div>
+    </div>`).join('');
+
+  el.querySelectorAll('[data-user-admin]').forEach(btn => btn.addEventListener('click', async () => {
+    const makeAdmin = btn.dataset.userAdmin === 'true';
+    if (!makeAdmin && !confirm(`Remove admin access from @${btn.dataset.username}?`)) return;
+    try { await rpc('admin_set_user_admin', { p_username: btn.dataset.username, p_make_admin: makeAdmin }); toast(makeAdmin ? 'Admin access granted' : 'Admin access removed'); await refresh(); } catch (_) {}
+  }));
+  el.querySelectorAll('[data-user-ban]').forEach(btn => btn.addEventListener('click', async () => {
+    const ban = btn.dataset.userBan === 'true';
+    let reason = null;
+    if (ban) {
+      reason = prompt(`Reason for banning @${btn.dataset.username}?`) || '';
+      if (!confirm(`Ban @${btn.dataset.username}?`)) return;
+    } else if (!confirm(`Unban @${btn.dataset.username}?`)) return;
+    try { await rpc('admin_set_user_banned', { p_username: btn.dataset.username, p_banned: ban, p_reason: reason }); toast(ban ? 'User banned' : 'User unbanned'); await refresh(); } catch (_) {}
+  }));
+}
+
+async function loadComments() {
+  const search = document.getElementById('comment-search').value.trim() || null;
+  let rows;
+  try { rows = await rpc('admin_find_comments', { p_search: search }); } catch (_) { return; }
+  const el = document.getElementById('comments-list');
+  if (!rows?.length) { el.innerHTML = `<div class="admin-empty">No comments found.</div>`; return; }
+  el.innerHTML = rows.map(c => `
+    <div class="admin-row">
+      <div class="admin-row-main">
+        <div class="admin-meta"><strong>@${escapeHtml(c.username)}</strong> on ${escapeHtml(c.article_code)} · ${formatDate(c.created_at)}</div>
+        <div class="admin-comment">${escapeHtml(c.content)}</div>
+      </div>
+      <div class="admin-actions"><button class="btn btn-danger btn-sm" data-comment-id="${escapeHtml(c.id)}">Remove</button></div>
+    </div>`).join('');
+  el.querySelectorAll('[data-comment-id]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Remove this comment?')) return;
+    try { await rpc('admin_delete_comment', { p_comment_id: btn.dataset.commentId }); toast('Comment removed'); await refresh(); } catch (_) {}
+  }));
+}
+
+async function refresh() { await Promise.all([loadDashboard(), loadArticles(), loadUsers(), loadComments()]); }
+document.getElementById('article-search-btn').addEventListener('click', loadArticles);
+document.getElementById('article-status').addEventListener('change', loadArticles);
+document.getElementById('user-search-btn').addEventListener('click', loadUsers);
+document.getElementById('comment-search-btn').addEventListener('click', loadComments);
+['article-search','user-search','comment-search'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById(id.replace('-search','-search-btn')).click(); }));
+</script>
+</body>
+</html>

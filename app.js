@@ -326,6 +326,11 @@ export async function ensureProfile(session) {
   return saved;
 }
 
+
+export function adminBadgeHtml(profile) {
+  return profile?.is_admin ? '<span class="admin-badge" title="Vequence administrator">ADMIN</span>' : '';
+}
+
 export async function getCurrentProfile() {
   const session = await getSession();
   if (!session) {
@@ -334,6 +339,24 @@ export async function getCurrentProfile() {
   }
   if (currentProfile && currentProfile.id === session.user.id) return currentProfile;
   return await ensureProfile(session);
+}
+
+export async function isAdmin() {
+  const session = await getSession();
+  if (!session) return false;
+  const { data, error } = await supabase.rpc('is_admin');
+  return !error && data === true;
+}
+
+export async function requireAdmin(redirectTo = 'auth.html') {
+  const session = await requireAuth(redirectTo);
+  if (!session) return null;
+  const admin = await isAdmin();
+  if (!admin) {
+    window.location.href = 'index.html';
+    return null;
+  }
+  return session;
 }
 
 export async function requireAuth(redirectTo = 'auth.html') {
@@ -382,6 +405,7 @@ export async function initHeader(activeLink) {
               <a href="profile.html?u=${encodeURIComponent(profile?.username || '')}">Your profile</a>
               <a href="editor.html">Write an article</a>
               <a href="settings.html">Settings</a>
+              ${profile?.is_admin ? '<a href="admin.html" class="admin-menu-link">Admin</a>' : ''}
               <button id="logout-btn">Sign out</button>
             </div>
           </div>

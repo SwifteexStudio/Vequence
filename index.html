@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vequence: Research, sourced and sequenced</title>
+<title>Vequence — Research, sourced and sequenced</title>
 <link rel="stylesheet" href="styles.css">
-<link rel="icon" type="image/jpeg" href="/Assets/favicon.jpg">
 </head>
 <body>
 
@@ -38,7 +37,7 @@
 <script type="module">
 import {
   supabase, requireAuth, initHeader, initFooter, escapeHtml, formatDate,
-  avatarHtml, qs, toast, getCurrentProfile
+  avatarHtml, qs, toast, getCurrentProfile, adminBadgeHtml
 } from './app.js';
 
 const feedEl = document.getElementById('feed');
@@ -48,7 +47,7 @@ const sortSelect = document.getElementById('sort-select');
 
 let activeCategory = '';
 let sortMode = 'for-you';
-let searchQuery = qs('q') || '';
+const searchQuery = qs('q') || '';
 let session = null;
 let myProfile = null;
 let userInterests = [];
@@ -93,45 +92,7 @@ const CATEGORIES = ['Neuroscience', 'Technology', 'Health', 'Economics', 'Physic
 
   renderCategoryChips();
   loadFeed();
-  wireLiveSearch();
 })();
-
-function wireLiveSearch() {
-  const input = document.getElementById('header-search-input');
-  const form = document.getElementById('header-search-form');
-  if (!input || !form) return;
-
-  // Intercept the form's normal full-page navigation and instead filter
-  // in place — faster, and preserves scroll position / active filters.
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    searchQuery = input.value.trim();
-    updateUrlQuery(searchQuery);
-    loadFeed();
-  });
-
-  let debounceTimer;
-  input.addEventListener('input', () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      const value = input.value.trim();
-      if (value === searchQuery) return;
-      searchQuery = value;
-      updateUrlQuery(searchQuery);
-      loadFeed();
-    }, 350);
-  });
-
-  // Clear button (in the header) already empties the input and re-submits;
-  // that submit is caught above, so no extra wiring needed here.
-}
-
-function updateUrlQuery(value) {
-  const url = new URL(window.location.href);
-  if (value) url.searchParams.set('q', value);
-  else url.searchParams.delete('q');
-  window.history.replaceState({}, '', url);
-}
 
 function renderCategoryChips() {
   // Prioritize interest categories at the front when present
@@ -181,7 +142,7 @@ function articleRow(article) {
         ${article.subtitle ? `<p class="dek">${escapeHtml(article.subtitle)}</p>` : ''}
         <div class="byline">
           ${avatarHtml(author, 22)}
-          <span class="author-name">${escapeHtml(author?.display_name || author?.username || 'Unknown')}</span>
+          <span class="author-name">${escapeHtml(author?.display_name || author?.username || 'Unknown')} ${adminBadgeHtml(author)}</span>
           <span>·</span>
           <span>${formatDate(article.published_at || article.created_at)}</span>
           <span>·</span>
@@ -250,13 +211,7 @@ async function loadFeed() {
     .eq('status', 'published');
 
   if (activeCategory) query = query.eq('category', activeCategory);
-  if (searchQuery) {
-    // Escape characters that are meaningful to PostgREST's or()/ilike syntax
-    // so a comma or % in someone's search doesn't break the filter or match
-    // unintended wildcards.
-    const safe = searchQuery.replace(/[%,()]/g, '');
-    if (safe) query = query.or(`title.ilike.%${safe}%,subtitle.ilike.%${safe}%`);
-  }
+  if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,subtitle.ilike.%${searchQuery}%`);
 
   // Fetch a wider pool when ranking client-side for "for you"
   const limit = sortMode === 'for-you' ? 60 : 30;
@@ -295,16 +250,7 @@ async function loadFeed() {
       <div class="empty-state">
         <h3>Nothing here yet</h3>
         <p>${searchQuery ? `No articles matched "${escapeHtml(searchQuery)}".` : 'Be the first to publish research in this topic.'}</p>
-        ${searchQuery ? `<button class="btn btn-quiet btn-sm" id="clear-search-btn" style="margin-top:14px;">Clear search</button>` : ''}
       </div>`;
-    const clearBtn = document.getElementById('clear-search-btn');
-    if (clearBtn) clearBtn.addEventListener('click', () => {
-      const input = document.getElementById('header-search-input');
-      if (input) input.value = '';
-      searchQuery = '';
-      updateUrlQuery('');
-      loadFeed();
-    });
     return;
   }
 

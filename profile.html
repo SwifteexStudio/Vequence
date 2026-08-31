@@ -21,7 +21,7 @@
 <footer id="site-footer"></footer>
 
 <script type="module">
-import { supabase, initHeader, initFooter, getSession, getCurrentProfile, ensureProfile, escapeHtml, formatDate, avatarHtml, toast, initials } from './app.js';
+import { supabase, initHeader, initFooter, getSession, getCurrentProfile, ensureProfile, escapeHtml, formatDate, avatarHtml, toast, initials, adminBadgeHtml } from './app.js';
 
 const username = new URLSearchParams(window.location.search).get('u');
 const root = document.getElementById('profile-root');
@@ -97,7 +97,7 @@ function renderProfile(stats) {
     <div class="profile-header">
       ${avatarHtml(profileUser, 84)}
       <div style="flex:1;">
-        <h1>${escapeHtml(profileUser.display_name || profileUser.username)}</h1>
+        <h1>${escapeHtml(profileUser.display_name || profileUser.username)} ${adminBadgeHtml(profileUser)}</h1>
         <div class="handle">@${escapeHtml(profileUser.username)}</div>
         ${profileUser.bio ? `<p class="bio">${escapeHtml(profileUser.bio)}</p>` : ''}
         <div class="profile-stats">
