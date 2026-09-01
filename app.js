@@ -9,6 +9,33 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+/** Synthetic email for helper accounts (no real inbox). Unique per username. */
+export function helperEmail(username) {
+  const u = String(username || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+  return `vhelper+${u}@v.com`;
+}
+
+/**
+ * Secondary auth client that does not touch the main session storage.
+ * Used so admins can create helper accounts without being signed out.
+ */
+export function createEphemeralAuthClient() {
+  const memory = {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {}
+  };
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storage: memory,
+      storageKey: 'vequence-ephemeral'
+    }
+  });
+}
+
 // ------------------------------------------------------------
 // Theme
 // ------------------------------------------------------------
@@ -106,9 +133,66 @@ export function timeAgo(dateStr) {
   return 'just now';
 }
 
+/**
+ * Estimate reading time from markdown.
+ * Strips syntax so code fences, links, images, and punctuation don't inflate the count.
+ * Uses ~230 wpm (typical for online non-fiction) and always returns at least 1.
+ */
+/**
+ * Count readable words in markdown (strips syntax so code/links/images
+ * don't inflate the number). Used by readingTime and the editor hint.
+ */
+export function wordCount(markdown) {
+  let text = String(markdown || '');
+  // Fenced code blocks — readers usually skim
+  text = text.replace(/```[\s\S]*?```/g, ' ');
+  // Inline code
+  text = text.replace(/`[^`]+`/g, ' ');
+  // Images ![alt](url)
+  text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, ' ');
+  // Links [label](url) → keep label only
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  // Footnote refs
+  text = text.replace(/\[\^\d+\]/g, ' ');
+  // Headings / emphasis / horizontal rules / list markers / blockquotes
+  text = text.replace(/^#{1,6}\s+/gm, '');
+  text = text.replace(/(\*\*|__|\*|_|~~)/g, '');
+  text = text.replace(/^\s*[-*+]\s+/gm, '');
+  text = text.replace(/^\s*\d+\.\s+/gm, '');
+  text = text.replace(/^>\s?/gm, '');
+  text = text.replace(/^---+$/gm, ' ');
+  // HTML tags if any
+  text = text.replace(/<[^>]+>/g, ' ');
+  // Collapse whitespace
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  return words.length;
+}
+
+/**
+ * Estimate reading time from markdown.
+ * ~230 wpm for research-style online non-fiction; always at least 1.
+ */
 export function readingTime(markdown) {
-  const words = (markdown || '').trim().split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.round(words / 200));
+  const words = wordCount(markdown);
+  if (words === 0) return 1;
+  return Math.max(1, Math.round(words / 230));
+}
+
+/** Human-friendly label, e.g. "1 min read" or "12 min read" */
+export function readingTimeLabel(minutes) {
+  const m = Math.max(1, Math.round(Number(minutes) || 1));
+  return m === 1 ? '1 min read' : `${m} min read`;
+}
+
+/**
+ * Resolve minutes for an article object: prefer live estimate from body
+ * markdown when available, otherwise fall back to stored column.
+ */
+export function articleReadingMinutes(article) {
+  if (!article) return 1;
+  const md = article.content?.markdown || article.content?.body || '';
+  if (md && String(md).trim()) return readingTime(md);
+  return Math.max(1, Number(article.reading_time_minutes) || 1);
 }
 
 export function initials(name) {
@@ -130,6 +214,44 @@ export function qs(params) {
   const url = new URL(window.location.href);
   if (params) return url.searchParams.get(params);
   return url.searchParams;
+}
+
+/**
+ * Sanitize a "next" redirect target.
+ * Only allow same-origin relative paths (no protocol, no //, no javascript:).
+ * Falls back to a safe default when the value is missing or unsafe.
+ */
+export function safeNextUrl(fallback = 'index.html') {
+  const params = new URLSearchParams(window.location.search);
+  let next = params.get('next') || '';
+  try {
+    // If someone passed a full URL, keep only path + search + hash on our origin
+    if (/^https?:\/\//i.test(next) || next.startsWith('//')) {
+      const u = new URL(next, window.location.origin);
+      if (u.origin !== window.location.origin) return fallback;
+      next = u.pathname + u.search + u.hash;
+    }
+  } catch (_) {
+    return fallback;
+  }
+  // Must be a relative path starting with / or a plain filename
+  if (!next || next.includes('://') || next.startsWith('//') || /^javascript:/i.test(next)) {
+    return fallback;
+  }
+  // Normalize: allow "index.html", "/index.html", "article.html?slug=x"
+  if (next.startsWith('/')) next = next.slice(1);
+  // Block path traversal
+  if (next.includes('..')) return fallback;
+  return next || fallback;
+}
+
+/** Build a safe auth redirect URL that returns the user here after login. */
+export function authRedirectUrl(authPage = 'auth.html') {
+  const here = window.location.pathname.split('/').pop() || 'index.html';
+  const search = window.location.search || '';
+  const hash = window.location.hash || '';
+  const next = encodeURIComponent(here + search + hash);
+  return `${authPage}?next=${next}`;
 }
 
 /** Format a tag: strip #, title-case words, keep lowercase slug storage optional */
@@ -353,7 +475,7 @@ export async function requireAdmin(redirectTo = 'auth.html') {
   if (!session) return null;
   const admin = await isAdmin();
   if (!admin) {
-    window.location.href = 'index.html';
+    window.location.replace('index.html');
     return null;
   }
   return session;
@@ -362,7 +484,9 @@ export async function requireAdmin(redirectTo = 'auth.html') {
 export async function requireAuth(redirectTo = 'auth.html') {
   const session = await getSession();
   if (!session) {
-    window.location.href = `${redirectTo}?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    // Use replace so the login page does not leave a back-stack entry to a gated page
+    const here = (window.location.pathname.split('/').pop() || 'index.html') + (window.location.search || '') + (window.location.hash || '');
+    window.location.replace(`${redirectTo}?next=${encodeURIComponent(here)}`);
     return null;
   }
   await ensureProfile(session);
@@ -373,7 +497,7 @@ export async function signOut() {
   await supabase.auth.signOut();
   currentSession = null;
   currentProfile = null;
-  window.location.href = 'index.html';
+  window.location.replace('index.html');
 }
 
 function settingsIcon() {
@@ -393,7 +517,7 @@ export async function initHeader(activeLink) {
     <div class="shell">
       <a href="index.html" class="wordmark">Ve<span>quence</span></a>
       <form class="header-search" action="index.html" method="get">
-        <input type="text" name="q" placeholder="Search research and articles" value="${escapeHtml(qs('q') || '')}">
+        <input type="text" name="q" placeholder="Search articles and people" value="${escapeHtml(qs('q') || '')}">
       </form>
       <nav class="header-nav">
         ${session ? `

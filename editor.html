@@ -137,7 +137,7 @@
 </template>
 
 <script type="module">
-import { supabase, requireAuth, initHeader, renderMarkdown, slugify, readingTime, toast, escapeHtml, ensureProfile } from './app.js';
+import { supabase, requireAuth, initHeader, renderMarkdown, slugify, readingTime, wordCount, toast, escapeHtml, ensureProfile } from './app.js';
 
 let session = null;
 let articleId = qsParam('id');
@@ -164,8 +164,10 @@ const readingHint = document.getElementById('reading-time-hint');
 
 function updatePreview() {
   mdPreview.innerHTML = renderMarkdown(mdInput.value) || '<p style="color:var(--ink-faint)">Preview appears here as you write…</p>';
-  const words = mdInput.value.trim().split(/\s+/).filter(Boolean).length;
-  readingHint.textContent = `${readingTime(mdInput.value)} min read · ${words} words`;
+  const md = mdInput.value;
+  const words = wordCount(md);
+  const mins = readingTime(md);
+  readingHint.textContent = `${mins} min read · ${words} word${words === 1 ? '' : 's'}`;
 }
 mdInput.addEventListener('input', updatePreview);
 updatePreview();

@@ -21,13 +21,14 @@
       <button class="chip active" data-category="">All</button>
     </div>
     <select class="sort-select" id="sort-select">
+      <option value="recent" selected>Most recent</option>
       <option value="for-you">For you</option>
-      <option value="recent">Most recent</option>
       <option value="popular">Most liked</option>
       <option value="discussed">Most discussed</option>
     </select>
   </div>
 
+  <div id="people-results"></div>
   <div id="feed"></div>
   <div id="feed-empty"></div>
 </main>
@@ -37,16 +38,18 @@
 <script type="module">
 import {
   supabase, requireAuth, initHeader, initFooter, escapeHtml, formatDate,
-  avatarHtml, qs, toast, getCurrentProfile, adminBadgeHtml
-} from './app.js';
+  avatarHtml, qs, toast, getCurrentProfile, adminBadgeHtml, readingTimeLabel, articleReadingMinutes } from './app.js';
 
 const feedEl = document.getElementById('feed');
 const emptyEl = document.getElementById('feed-empty');
+const peopleEl = document.getElementById('people-results');
 const tagFiltersEl = document.getElementById('tag-filters');
 const sortSelect = document.getElementById('sort-select');
+let realtimeChannel = null;
+let loadFeedToken = 0;
 
 let activeCategory = '';
-let sortMode = 'for-you';
+let sortMode = 'recent';
 const searchQuery = qs('q') || '';
 let session = null;
 let myProfile = null;
@@ -92,6 +95,7 @@ const CATEGORIES = ['Neuroscience', 'Technology', 'Health', 'Economics', 'Physic
 
   renderCategoryChips();
   loadFeed();
+  subscribeRealtime();
 })();
 
 function renderCategoryChips() {
@@ -146,7 +150,7 @@ function articleRow(article) {
           <span>·</span>
           <span>${formatDate(article.published_at || article.created_at)}</span>
           <span>·</span>
-          <span>${article.reading_time_minutes || 1} min read</span>
+          <span>${readingTimeLabel(articleReadingMinutes(article))}</span>
         </div>
         <div class="article-row-stats">
           ${article.sources_count > 0 ? `<span class="evidence-badge">📎 ${article.sources_count} source${article.sources_count > 1 ? 's' : ''}</span>` : ''}
@@ -186,10 +190,10 @@ function scoreArticle(a, now = Date.now()) {
   score += Math.min(likes * 1.5, 25);
   score += Math.min(comments * 2, 20);
 
-  // Recency decay (half-life ~7 days)
+  // Recency: stronger preference for latest articles (half-life ~3 days)
   const published = new Date(a.published_at || a.created_at || 0).getTime();
   const ageDays = Math.max(0, (now - published) / 86400000);
-  const recency = 30 * Math.exp(-ageDays / 7);
+  const recency = 55 * Math.exp(-ageDays / 3);
   score += recency;
 
   // Mild boost for having a cover image (completeness)
@@ -201,27 +205,77 @@ function scoreArticle(a, now = Date.now()) {
   return score;
 }
 
+async function loadPeople() {
+  if (!peopleEl) return;
+  if (!searchQuery) {
+    peopleEl.innerHTML = '';
+    return;
+  }
+  const q = searchQuery.trim();
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, display_name, avatar_url, bio, is_admin')
+    .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
+    .order('username', { ascending: true })
+    .limit(12);
+
+  if (error || !data || data.length === 0) {
+    peopleEl.innerHTML = '';
+    return;
+  }
+
+  peopleEl.innerHTML = `
+    <section class="people-results-section" style="margin-bottom:28px;">
+      <h2 class="section-label" style="font-size:13px;letter-spacing:0.04em;text-transform:uppercase;opacity:0.7;margin-bottom:12px;">People</h2>
+      <div class="people-grid" style="display:grid;gap:10px;">
+        ${data.map(u => `
+          <a href="profile.html?u=${encodeURIComponent(u.username)}" class="people-row" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;text-decoration:none;color:inherit;background:var(--surface-2, transparent);">
+            ${avatarHtml(u, 40)}
+            <div style="min-width:0;flex:1;">
+              <div style="font-weight:600;display:flex;align-items:center;gap:6px;">
+                ${escapeHtml(u.display_name || u.username)} ${adminBadgeHtml(u)}
+              </div>
+              <div style="font-size:13px;opacity:0.7;">@${escapeHtml(u.username)}</div>
+              ${u.bio ? `<div style="font-size:13px;opacity:0.75;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(u.bio)}</div>` : ''}
+            </div>
+          </a>
+        `).join('')}
+      </div>
+    </section>`;
+}
+
 async function loadFeed() {
+  const token = ++loadFeedToken;
   feedEl.innerHTML = rowSkeleton() + rowSkeleton() + rowSkeleton();
   emptyEl.innerHTML = '';
 
+  // People search runs in parallel with articles when there is a query
+  const peoplePromise = loadPeople();
+
   let query = supabase
     .from('articles')
-    .select('*, users(username, display_name, avatar_url), article_tags(tags(name)), sources(id)')
+    .select('*, users(username, display_name, avatar_url, is_admin), article_tags(tags(name)), sources(id)')
     .eq('status', 'published');
 
   if (activeCategory) query = query.eq('category', activeCategory);
-  if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,subtitle.ilike.%${searchQuery}%`);
+  if (searchQuery) {
+    // Search title, subtitle, and category
+    query = query.or(`title.ilike.%${searchQuery}%,subtitle.ilike.%${searchQuery}%,category.ilike.%${searchQuery}%`);
+  }
 
   // Fetch a wider pool when ranking client-side for "for you"
   const limit = sortMode === 'for-you' ? 60 : 30;
 
-  if (sortMode === 'popular') query = query.order('like_count', { ascending: false });
-  else if (sortMode === 'discussed') query = query.order('comment_count', { ascending: false });
-  else if (sortMode === 'recent') query = query.order('published_at', { ascending: false });
-  else query = query.order('published_at', { ascending: false }); // base pool for for-you
+  // Always prefer newest as the primary ordering; secondary sorts layer on top
+  if (sortMode === 'popular') query = query.order('like_count', { ascending: false }).order('published_at', { ascending: false });
+  else if (sortMode === 'discussed') query = query.order('comment_count', { ascending: false }).order('published_at', { ascending: false });
+  else query = query.order('published_at', { ascending: false }); // recent + for-you base pool
 
   const { data, error } = await query.limit(limit);
+  await peoplePromise;
+
+  // Ignore stale responses if a newer loadFeed started
+  if (token !== loadFeedToken) return;
 
   if (error) {
     toast('Could not load articles', 'error');
@@ -246,7 +300,8 @@ async function loadFeed() {
 
   if (articles.length === 0) {
     feedEl.innerHTML = '';
-    emptyEl.innerHTML = `
+    const hasPeople = peopleEl && peopleEl.innerHTML.trim().length > 0;
+    emptyEl.innerHTML = hasPeople ? '' : `
       <div class="empty-state">
         <h3>Nothing here yet</h3>
         <p>${searchQuery ? `No articles matched "${escapeHtml(searchQuery)}".` : 'Be the first to publish research in this topic.'}</p>
@@ -254,7 +309,58 @@ async function loadFeed() {
     return;
   }
 
+  emptyEl.innerHTML = '';
   feedEl.innerHTML = articles.map(articleRow).join('');
+}
+
+function subscribeRealtime() {
+  if (realtimeChannel) {
+    try { supabase.removeChannel(realtimeChannel); } catch (_) {}
+    realtimeChannel = null;
+  }
+
+  // Live updates: new/updated published articles appear without manual refresh
+  realtimeChannel = supabase
+    .channel('vequence-articles-feed')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'articles' },
+      (payload) => {
+        if (payload.new?.status === 'published') {
+          // Soft refresh so the latest article shows up immediately
+          loadFeed();
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'articles' },
+      (payload) => {
+        // Status changed to published, or engagement counts updated
+        if (payload.new?.status === 'published') {
+          loadFeed();
+        } else if (payload.old?.status === 'published' && payload.new?.status !== 'published') {
+          loadFeed();
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'articles' },
+      () => { loadFeed(); }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        // Connected — feed stays live
+      }
+    });
+
+  // Clean up when leaving the page
+  window.addEventListener('beforeunload', () => {
+    if (realtimeChannel) {
+      try { supabase.removeChannel(realtimeChannel); } catch (_) {}
+    }
+  });
 }
 
 sortSelect.addEventListener('change', () => {

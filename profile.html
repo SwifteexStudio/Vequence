@@ -21,7 +21,7 @@
 <footer id="site-footer"></footer>
 
 <script type="module">
-import { supabase, initHeader, initFooter, getSession, getCurrentProfile, ensureProfile, escapeHtml, formatDate, avatarHtml, toast, initials, adminBadgeHtml } from './app.js';
+import { supabase, initHeader, initFooter, getSession, getCurrentProfile, ensureProfile, escapeHtml, formatDate, avatarHtml, toast, initials, adminBadgeHtml, readingTimeLabel, articleReadingMinutes } from './app.js';
 
 const username = new URLSearchParams(window.location.search).get('u');
 const root = document.getElementById('profile-root');
@@ -244,7 +244,7 @@ function articleRowSmall(a) {
         <div class="byline">
           <span>${formatDate(a.published_at || a.created_at)}</span>
           <span>·</span>
-          <span>${a.reading_time_minutes || 1} min read</span>
+          <span>${readingTimeLabel(articleReadingMinutes(a))}</span>
         </div>
         <div class="article-row-stats">
           <span>♥ ${a.like_count || 0}</span>

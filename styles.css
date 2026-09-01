@@ -326,7 +326,50 @@ img { max-width: 100%; display: block; }
 }
 .icon-btn:hover { color: var(--ink); background: var(--paper-raised); }
 .icon-btn.active { color: var(--evergreen); }
+
 .icon-btn svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+.share-wrap { position: relative; display: inline-flex; }
+/* Fixed positioning is applied in JS so the menu never clips inside overflow parents */
+.share-menu {
+  display: none;
+  position: fixed;
+  min-width: 190px;
+  background: var(--paper, #fff);
+  border: 1px solid var(--hairline, rgba(0,0,0,0.1));
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(23, 27, 24, 0.14);
+  padding: 6px;
+  z-index: 9999;
+}
+[data-theme="dark"] .share-menu,
+[data-theme="warm"] .share-menu {
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+}
+.share-menu.open { display: block; }
+.share-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.share-menu button:hover { background: var(--paper-raised, rgba(0,0,0,0.04)); }
+.share-menu button:focus-visible {
+  outline: 2px solid var(--evergreen, #2f6f5e);
+  outline-offset: 1px;
+}
+.article-meta-row,
+.article-actions {
+  overflow: visible;
+}
+
 
 /* ---------- Forms ---------- */
 

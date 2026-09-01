@@ -41,6 +41,27 @@
   </div>
 
   <section class="admin-card" style="margin-top:20px;">
+    <div class="admin-card-head"><div><h2>Helper accounts</h2><p>Create staff/helper logins without a real email. They sign in with username + password. Placeholder domain: <code>vhelper+username@v.com</code>.</p></div></div>
+    <form id="helper-form" class="admin-toolbar" style="flex-wrap:wrap;align-items:flex-end;gap:10px;">
+      <div class="field" style="margin:0;min-width:140px;">
+        <label for="helper-username">Username</label>
+        <input id="helper-username" required pattern="[a-zA-Z0-9_]{3,30}" placeholder="desk_editor" autocomplete="off">
+      </div>
+      <div class="field" style="margin:0;min-width:160px;">
+        <label for="helper-display">Display name</label>
+        <input id="helper-display" placeholder="Desk Editor" autocomplete="off">
+      </div>
+      <div class="field" style="margin:0;min-width:160px;">
+        <label for="helper-password">Password</label>
+        <input id="helper-password" type="password" required minlength="6" placeholder="Min 6 characters" autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" id="helper-create-btn">Create helper</button>
+    </form>
+    <p class="hint" id="helper-hint" style="margin-top:8px;">Helpers use a synthetic email so no inbox is required. Sign in on the auth page with the <strong>username</strong> and password.</p>
+    <div id="helpers-list" style="margin-top:12px;"></div>
+  </section>
+
+  <section class="admin-card" style="margin-top:20px;">
     <div class="admin-card-head"><div><h2>Comments</h2><p>Search and remove comments that violate your rules.</p></div></div>
     <div class="admin-toolbar">
       <input id="comment-search" placeholder="Comment text, username or Article ID…">
@@ -52,7 +73,7 @@
 <footer id="site-footer"></footer>
 
 <script type="module">
-import { supabase, requireAdmin, initHeader, initFooter, escapeHtml, formatDate, toast } from './app.js';
+import { supabase, requireAdmin, initHeader, initFooter, escapeHtml, formatDate, toast, helperEmail, createEphemeralAuthClient } from './app.js';
 
 let session;
 
@@ -61,7 +82,7 @@ let session;
   if (!session) return;
   await initHeader();
   initFooter();
-  await Promise.all([loadDashboard(), loadArticles(), loadUsers(), loadComments()]);
+  await Promise.all([loadDashboard(), loadArticles(), loadUsers(), loadComments(), loadHelpers()]);
 })();
 
 async function rpc(name, args = {}) {
@@ -167,7 +188,78 @@ async function loadComments() {
   }));
 }
 
-async function refresh() { await Promise.all([loadDashboard(), loadArticles(), loadUsers(), loadComments()]); }
+
+async function loadHelpers() {
+  const el = document.getElementById('helpers-list');
+  if (!el) return;
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, display_name, created_at, banned_at')
+    .eq('is_helper', true)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) { el.innerHTML = `<div class="admin-empty">${escapeHtml(error.message)}</div>`; return; }
+  if (!data?.length) { el.innerHTML = `<div class="admin-empty">No helper accounts yet.</div>`; return; }
+  el.innerHTML = data.map(u => `
+    <div class="admin-row">
+      <div class="admin-row-main">
+        <h3>@${escapeHtml(u.username)} ${u.banned_at ? '<span class="admin-badge" style="background:#b33;">BANNED</span>' : '<span class="admin-badge">HELPER</span>'}</h3>
+        <div class="admin-meta">${escapeHtml(u.display_name || '')} · ${helperEmail(u.username)} · ${formatDate(u.created_at)}</div>
+      </div>
+    </div>`).join('');
+}
+
+document.getElementById('helper-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('helper-create-btn');
+  const username = document.getElementById('helper-username').value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const display = document.getElementById('helper-display').value.trim() || username;
+  const password = document.getElementById('helper-password').value;
+  if (username.length < 3) { toast('Username must be at least 3 characters', 'error'); return; }
+  if (password.length < 6) { toast('Password must be at least 6 characters', 'error'); return; }
+
+  // Ensure username not taken
+  const { data: taken } = await supabase.from('users').select('id').eq('username', username).maybeSingle();
+  if (taken) { toast('Username already taken', 'error'); return; }
+
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const email = helperEmail(username);
+    const ephemeral = createEphemeralAuthClient();
+    const { data, error } = await ephemeral.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username,
+          display_name: display,
+          is_helper: true
+        }
+      }
+    });
+    if (error) throw error;
+    const userId = data.user?.id;
+    if (!userId) throw new Error('No user returned — check Auth email confirmation settings (helpers need signup without blocking).');
+
+    // Mark profile via admin RPC (creates/updates public.users with is_helper)
+    await rpc('admin_mark_helper', { p_user_id: userId, p_username: username, p_display_name: display });
+
+    toast(`Helper @${username} created — sign in with that username`);
+    document.getElementById('helper-form').reset();
+    await loadHelpers();
+    await loadDashboard();
+  } catch (err) {
+    toast(err.message || 'Could not create helper', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
+
+async function refresh() { await Promise.all([loadDashboard(), loadArticles(), loadUsers(), loadComments(), loadHelpers()]); }
 document.getElementById('article-search-btn').addEventListener('click', loadArticles);
 document.getElementById('article-status').addEventListener('change', loadArticles);
 document.getElementById('user-search-btn').addEventListener('click', loadUsers);

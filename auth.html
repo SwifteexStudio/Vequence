@@ -16,8 +16,8 @@
     <p class="sub">Sign in to write, follow authors, and save research.</p>
     <form id="signin-form">
       <div class="field">
-        <label for="si-email">Email</label>
-        <input type="email" id="si-email" required autocomplete="email">
+        <label for="si-email">Email or username</label>
+        <input type="text" id="si-email" required autocomplete="username" placeholder="you@email.com or helper username">
       </div>
       <div class="field">
         <label for="si-password">Password</label>
@@ -127,8 +127,7 @@
 <script type="module">
 import {
   supabase, initHeader, getSession, ensureProfile, toast, slugify,
-  INTEREST_TOPICS, escapeHtml
-} from './app.js';
+  INTEREST_TOPICS, escapeHtml, safeNextUrl, helperEmail } from './app.js';
 
 initHeader();
 
@@ -136,7 +135,7 @@ initHeader();
   const session = await getSession();
   if (session) {
     await ensureProfile(session);
-    window.location.href = nextUrl();
+    window.location.replace(nextUrl());
   }
 })();
 
@@ -156,8 +155,22 @@ document.getElementById('show-signin').addEventListener('click', (e) => {
 });
 
 function nextUrl() {
+  // Prefer the shared sanitizer when available; fall back to a local safe version.
+  if (typeof safeNextUrl === 'function') return safeNextUrl('index.html');
   const params = new URLSearchParams(window.location.search);
-  return params.get('next') || 'index.html';
+  let next = params.get('next') || '';
+  try {
+    if (/^https?:\/\//i.test(next) || next.startsWith('//')) {
+      const u = new URL(next, window.location.origin);
+      if (u.origin !== window.location.origin) return 'index.html';
+      next = u.pathname + u.search + u.hash;
+    }
+  } catch (_) { return 'index.html'; }
+  if (!next || next.includes('://') || next.startsWith('//') || /^javascript:/i.test(next) || next.includes('..')) {
+    return 'index.html';
+  }
+  if (next.startsWith('/')) next = next.slice(1);
+  return next || 'index.html';
 }
 
 document.getElementById('signin-form').addEventListener('submit', async (e) => {
@@ -167,10 +180,30 @@ document.getElementById('signin-form').addEventListener('submit', async (e) => {
   errEl.style.display = 'none';
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
 
-  const email = document.getElementById('si-email').value.trim();
+  const raw = document.getElementById('si-email').value.trim();
   const password = document.getElementById('si-password').value;
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  // Helpers log in with username (no real email). Map to vhelper+user@v.com.
+  let email = raw;
+  if (raw && !raw.includes('@')) {
+    const uname = raw.replace(/^@/, '').toLowerCase();
+    let isHelper = false;
+    try {
+      const { data: flag } = await supabase.rpc('is_helper_username', { p_username: uname });
+      isHelper = !!flag;
+    } catch (_) {}
+    if (isHelper) {
+      email = helperEmail(uname);
+    } else {
+      // Still try the helper convention in case RPC is unavailable
+      email = helperEmail(uname);
+    }
+  }
+
+  let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  // If username login failed and input had no @, also try treating it as a real email was wrong —
+  // fall through with the error.
   btn.disabled = false; btn.textContent = 'Sign in';
 
   if (error) {
@@ -180,7 +213,7 @@ document.getElementById('signin-form').addEventListener('submit', async (e) => {
   }
   if (data.session) await ensureProfile(data.session);
   toast('Welcome back!');
-  window.location.href = nextUrl();
+  window.location.replace(nextUrl());
 });
 
 let signupEmail = '';
@@ -487,7 +520,7 @@ async function finishSignup() {
   }
 
   toast('Welcome to Vequence!');
-  window.location.href = nextUrl();
+  window.location.replace(nextUrl());
 }
 
 document.getElementById('su-finish-btn').addEventListener('click', finishSignup);

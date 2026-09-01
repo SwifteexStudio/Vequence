@@ -26,8 +26,7 @@
 <script type="module">
 import {
   supabase, initHeader, initFooter, getSession, getCurrentProfile,
-  renderMarkdown, escapeHtml, formatDate, timeAgo, avatarHtml, toast, adminBadgeHtml
-} from './app.js';
+  renderMarkdown, escapeHtml, formatDate, timeAgo, avatarHtml, toast, adminBadgeHtml, authRedirectUrl, readingTime, readingTimeLabel, articleReadingMinutes } from './app.js';
 
 const slug = new URLSearchParams(window.location.search).get('slug');
 const root = document.getElementById('article-root');
@@ -52,6 +51,9 @@ let session, myProfile, article, iLiked = false, iBookmarked = false;
 
   if (error || !data) { showNotFound(); return; }
   article = data;
+
+  // Live estimate from body markdown (falls back to stored column)
+  article._readMins = articleReadingMinutes(article);
 
   if (article.status !== 'published' && (!session || session.user.id !== article.author_id)) {
     showNotFound(); return;
@@ -87,6 +89,134 @@ function bookmarkIcon(filled) {
   return filled
     ? `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>`
     : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>`;
+}
+
+function shareIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
+}
+
+function articleShareUrl() {
+  // Clean absolute URL for this article (slug only)
+  const path = `article.html?slug=${encodeURIComponent(article.slug)}`;
+  try {
+    return new URL(path, window.location.href).href.split('#')[0];
+  } catch (_) {
+    return (window.location.origin || '') + '/' + path;
+  }
+}
+
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) {}
+  // Fallback for non-secure contexts / older browsers
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+function positionShareMenu(btn, menu) {
+  const rect = btn.getBoundingClientRect();
+  const menuWidth = Math.max(190, menu.offsetWidth || 190);
+  const pad = 8;
+  let left = rect.right - menuWidth;
+  let top = rect.bottom + 6;
+  // Keep inside the viewport
+  left = Math.max(pad, Math.min(left, window.innerWidth - menuWidth - pad));
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+  menu.style.right = 'auto';
+  // If it would overflow the bottom, flip above the button
+  requestAnimationFrame(() => {
+    const h = menu.offsetHeight || 0;
+    if (top + h > window.innerHeight - pad && rect.top > h + 12) {
+      menu.style.top = `${Math.round(rect.top - h - 6)}px`;
+    }
+  });
+}
+
+function initShare() {
+  const btn = document.getElementById('share-btn');
+  const menu = document.getElementById('share-menu');
+  if (!btn || !menu) return;
+
+  // Move menu to body so no ancestor overflow can clip it
+  if (menu.parentElement !== document.body) {
+    document.body.appendChild(menu);
+  }
+
+  const nativeBtn = document.getElementById('share-native');
+  if (nativeBtn && navigator.share) nativeBtn.style.display = '';
+
+  const close = () => {
+    menu.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  };
+
+  const openMenu = () => {
+    menu.classList.add('open');
+    btn.setAttribute('aria-expanded', 'true');
+    positionShareMenu(btn, menu);
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains('open')) close();
+    else openMenu();
+  });
+  document.addEventListener('click', close);
+  window.addEventListener('resize', () => {
+    if (menu.classList.contains('open')) positionShareMenu(btn, menu);
+  });
+  window.addEventListener('scroll', () => {
+    if (menu.classList.contains('open')) positionShareMenu(btn, menu);
+  }, true);
+
+  menu.addEventListener('click', async (e) => {
+    const target = e.target.closest('[data-share]');
+    if (!target) return;
+    e.stopPropagation();
+    const action = target.dataset.share;
+    const url = articleShareUrl();
+    const title = article.title || 'Vequence article';
+    const text = article.subtitle || title;
+
+    try {
+      if (action === 'copy') {
+        const ok = await copyToClipboard(url);
+        toast(ok ? 'Link copied' : 'Could not copy link', ok ? 'info' : 'error');
+      } else if (action === 'x') {
+        const share = `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`;
+        window.open(share, '_blank', 'noopener,noreferrer');
+      } else if (action === 'linkedin') {
+        const share = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+        window.open(share, '_blank', 'noopener,noreferrer');
+      } else if (action === 'email') {
+        const mailto = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text + '\n\n' + url)}`;
+        window.location.href = mailto;
+      } else if (action === 'native' && navigator.share) {
+        await navigator.share({ title, text, url });
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') { /* user cancelled native share */ }
+      else toast('Share failed', 'error');
+    }
+    close();
+  });
 }
 
 function sourceTypeLabel(t) {
@@ -137,13 +267,23 @@ function renderArticle() {
           ${avatarHtml(author, 42)}
           <div>
             <div class="name"><a href="profile.html?u=${encodeURIComponent(author?.username || '')}">${escapeHtml(author?.display_name || author?.username || 'Unknown')}</a> ${adminBadgeHtml(author)}</div>
-            <div class="sub">${formatDate(article.published_at || article.created_at)} · ${article.reading_time_minutes || 1} min read · ${article.view_count || 0} views · <span class="article-code-inline">${escapeHtml(article.article_code || '')}</span></div>
+            <div class="sub">${formatDate(article.published_at || article.created_at)} · ${readingTimeLabel(article._readMins)} · ${article.view_count || 0} views · <span class="article-code-inline">${escapeHtml(article.article_code || '')}</span></div>
           </div>
         </div>
         <div class="article-actions">
           ${isOwner ? `<a href="editor.html?id=${article.id}" class="btn btn-quiet btn-sm">Edit</a>` : ''}
           <button class="icon-btn ${iLiked ? 'active' : ''}" id="like-btn">${heartIcon(iLiked)} <span id="like-count">${article.like_count || 0}</span></button>
           <button class="icon-btn ${iBookmarked ? 'active' : ''}" id="bookmark-btn">${bookmarkIcon(iBookmarked)}</button>
+          <div class="share-wrap">
+            <button class="icon-btn" id="share-btn" title="Share article" aria-haspopup="true" aria-expanded="false">${shareIcon()}</button>
+            <div class="share-menu" id="share-menu" role="menu">
+              <button type="button" data-share="copy" role="menuitem">Copy link</button>
+              <button type="button" data-share="x" role="menuitem">Share on X</button>
+              <button type="button" data-share="linkedin" role="menuitem">Share on LinkedIn</button>
+              <button type="button" data-share="email" role="menuitem">Email</button>
+              <button type="button" data-share="native" role="menuitem" id="share-native" style="display:none;">Share…</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -159,10 +299,11 @@ function renderArticle() {
 
   document.getElementById('like-btn').addEventListener('click', toggleLike);
   document.getElementById('bookmark-btn').addEventListener('click', toggleBookmark);
+  initShare();
 }
 
 async function toggleLike() {
-  if (!session) { window.location.href = `auth.html?next=${encodeURIComponent(window.location.href)}`; return; }
+  if (!session) { window.location.href = authRedirectUrl(); return; }
   const btn = document.getElementById('like-btn');
   const countEl = document.getElementById('like-count');
   if (iLiked) {
@@ -179,7 +320,7 @@ async function toggleLike() {
 }
 
 async function toggleBookmark() {
-  if (!session) { window.location.href = `auth.html?next=${encodeURIComponent(window.location.href)}`; return; }
+  if (!session) { window.location.href = authRedirectUrl(); return; }
   const btn = document.getElementById('bookmark-btn');
   if (iBookmarked) {
     await supabase.from('bookmarks').delete().eq('user_id', session.user.id).eq('article_id', article.id);
@@ -275,7 +416,7 @@ async function loadComments() {
           <textarea placeholder="Add to the discussion..." id="top-comment-text"></textarea>
           <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Post</button>
         </form>
-      ` : `<p class="hint" style="padding:16px 0;"><a href="auth.html?next=${encodeURIComponent(window.location.href)}" style="color:var(--evergreen-dark);font-weight:600;">Sign in</a> to join the discussion.</p>`}
+      ` : `<p class="hint" style="padding:16px 0;"><a href="${authRedirectUrl()}" style="color:var(--evergreen-dark);font-weight:600;">Sign in</a> to join the discussion.</p>`}
       <div id="comment-list">
         ${top.length ? top.sort((a, b) => (b.is_pinned - a.is_pinned)).map(c => commentHtml(c)).join('') : '<div class="empty-state" style="padding:40px 0;"><p>No comments yet — be the first to weigh in.</p></div>'}
       </div>
