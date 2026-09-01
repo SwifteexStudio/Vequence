@@ -74,6 +74,19 @@
   </section>
 
   <section class="settings-section">
+    <h2 class="section-label">Discover feed</h2>
+    <p class="hint" style="margin-bottom:14px;">Control whether staff/helper accounts appear in your feed.</p>
+    <label class="settings-toggle-row" style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;user-select:none;">
+      <input type="checkbox" id="hide-helpers-toggle" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;">
+      <span>
+        <strong style="display:block;font-size:15px;">Hide helper account articles</strong>
+        <span class="hint" style="display:block;margin-top:4px;">When enabled, posts from helper accounts (and @voyeger) are hidden from Discover. Turn off to see them like any other author.</span>
+      </span>
+    </label>
+    <button type="button" class="btn btn-quiet btn-sm" id="save-feed-prefs-btn" style="margin-top:14px;">Save feed preference</button>
+  </section>
+
+  <section class="settings-section">
     <h2 class="section-label">Session</h2>
     <button type="button" class="btn btn-quiet btn-sm" id="signout-btn">Sign out</button>
   </section>
@@ -240,6 +253,28 @@ document.getElementById('save-interests-btn').addEventListener('click', async ()
   localStorage.setItem('vequence-interests', JSON.stringify(selected));
   await supabase.auth.updateUser({ data: { interests: selected } });
   toast('Interests saved');
+});
+
+// ---- Hide helpers preference (Discover) ----
+const HIDE_HELPERS_KEY = 'vequence-hide-helpers';
+function getHideHelpersPref() {
+  const meta = session.user.user_metadata?.hide_helper_articles;
+  if (typeof meta === 'boolean') return meta;
+  try {
+    const v = localStorage.getItem(HIDE_HELPERS_KEY);
+    if (v === '1' || v === 'true') return true;
+    if (v === '0' || v === 'false') return false;
+  } catch (_) {}
+  return false; // default: show helper articles
+}
+const hideHelpersToggle = document.getElementById('hide-helpers-toggle');
+if (hideHelpersToggle) hideHelpersToggle.checked = getHideHelpersPref();
+
+document.getElementById('save-feed-prefs-btn').addEventListener('click', async () => {
+  const on = !!document.getElementById('hide-helpers-toggle').checked;
+  try { localStorage.setItem(HIDE_HELPERS_KEY, on ? '1' : '0'); } catch (_) {}
+  await supabase.auth.updateUser({ data: { hide_helper_articles: on } });
+  toast(on ? 'Helper articles hidden on Discover' : 'Helper articles visible on Discover');
 });
 
 document.getElementById('signout-btn').addEventListener('click', signOut);

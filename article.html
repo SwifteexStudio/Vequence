@@ -261,6 +261,7 @@ function renderArticle() {
       ${article.category ? `<div class="kicker">${escapeHtml(article.category)}</div>` : ''}
       <h1>${escapeHtml(article.title)}</h1>
       ${article.subtitle ? `<p class="subtitle">${escapeHtml(article.subtitle)}</p>` : ''}
+      ${article.content?.auto_translated ? `<p class="hint" style="margin:0 0 12px;">Auto-translated to English${article.content?.source_language ? ` from ${escapeHtml(String(article.content.source_language).toUpperCase())}` : ''}.</p>` : ''}
 
       <div class="article-meta-row">
         <div class="article-meta-author">

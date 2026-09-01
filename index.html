@@ -56,6 +56,22 @@ let myProfile = null;
 let userInterests = [];
 let followingIds = new Set();
 let likedArticleIds = new Set();
+/** When true, helper accounts (+ @voyeger) are excluded from Discover. Controlled in Settings. */
+let hideHelpersEnabled = false;
+let hiddenAuthorIds = new Set();
+const HIDDEN_USERNAMES = new Set(['voyeger']);
+const HIDE_HELPERS_KEY = 'vequence-hide-helpers';
+
+function readHideHelpersPref(session) {
+  const meta = session?.user?.user_metadata?.hide_helper_articles;
+  if (typeof meta === 'boolean') return meta;
+  try {
+    const v = localStorage.getItem(HIDE_HELPERS_KEY);
+    if (v === '1' || v === 'true') return true;
+    if (v === '0' || v === 'false') return false;
+  } catch (_) {}
+  return false; // default OFF → helpers visible
+}
 
 const CATEGORIES = ['Neuroscience', 'Technology', 'Health', 'Economics', 'Physics', 'Psychology', 'Climate', 'AI & ML'];
 
@@ -86,6 +102,30 @@ const CATEGORIES = ['Neuroscience', 'Technology', 'Health', 'Economics', 'Physic
 
   followingIds = new Set((followsRes.data || []).map(f => f.followed_id));
   likedArticleIds = new Set((likesRes.data || []).map(l => l.article_id));
+
+  // Preference: hide helper / @voyeger articles only when enabled in Settings
+  hideHelpersEnabled = readHideHelpersPref(session);
+  hiddenAuthorIds = new Set();
+  if (hideHelpersEnabled) {
+    try {
+      const { data: hiddenUsers } = await supabase
+        .from('users')
+        .select('id, username, is_helper')
+        .or('is_helper.eq.true,username.ilike.voyeger');
+      hiddenAuthorIds = new Set(
+        (hiddenUsers || [])
+          .filter(u => u.is_helper || HIDDEN_USERNAMES.has(String(u.username || '').toLowerCase()))
+          .map(u => u.id)
+      );
+      const { data: named } = await supabase
+        .from('users')
+        .select('id, username')
+        .in('username', [...HIDDEN_USERNAMES]);
+      for (const u of named || []) hiddenAuthorIds.add(u.id);
+    } catch (_) {
+      hiddenAuthorIds = new Set();
+    }
+  }
 
   // Default sort: For you when we have signals, else recent
   if (!userInterests.length && !followingIds.size) {
@@ -212,14 +252,23 @@ async function loadPeople() {
     return;
   }
   const q = searchQuery.trim();
-  const { data, error } = await supabase
+  let peopleQuery = supabase
     .from('users')
-    .select('id, username, display_name, avatar_url, bio, is_admin')
+    .select('id, username, display_name, avatar_url, bio, is_admin, is_helper')
     .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
     .order('username', { ascending: true })
     .limit(12);
+  if (hideHelpersEnabled) peopleQuery = peopleQuery.eq('is_helper', false);
 
-  if (error || !data || data.length === 0) {
+  const { data, error } = await peopleQuery;
+
+  const people = (data || []).filter(u => {
+    if (!hideHelpersEnabled) return true;
+    if (u.is_helper) return false;
+    if (HIDDEN_USERNAMES.has(String(u.username || '').toLowerCase())) return false;
+    return true;
+  });
+  if (error || !people.length) {
     peopleEl.innerHTML = '';
     return;
   }
@@ -228,7 +277,7 @@ async function loadPeople() {
     <section class="people-results-section" style="margin-bottom:28px;">
       <h2 class="section-label" style="font-size:13px;letter-spacing:0.04em;text-transform:uppercase;opacity:0.7;margin-bottom:12px;">People</h2>
       <div class="people-grid" style="display:grid;gap:10px;">
-        ${data.map(u => `
+        ${people.map(u => `
           <a href="profile.html?u=${encodeURIComponent(u.username)}" class="people-row" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;text-decoration:none;color:inherit;background:var(--surface-2, transparent);">
             ${avatarHtml(u, 40)}
             <div style="min-width:0;flex:1;">
@@ -254,8 +303,13 @@ async function loadFeed() {
 
   let query = supabase
     .from('articles')
-    .select('*, users(username, display_name, avatar_url, is_admin), article_tags(tags(name)), sources(id)')
+    .select('*, users(username, display_name, avatar_url, is_admin, is_helper), article_tags(tags(name)), sources(id)')
     .eq('status', 'published');
+
+  // Server-side exclude helper / blocked authors only when preference is on
+  if (hideHelpersEnabled && hiddenAuthorIds.size) {
+    query = query.not('author_id', 'in', `(${[...hiddenAuthorIds].join(',')})`);
+  }
 
   if (activeCategory) query = query.eq('category', activeCategory);
   if (searchQuery) {
@@ -283,10 +337,19 @@ async function loadFeed() {
     return;
   }
 
-  let articles = (data || []).map(a => ({
-    ...a,
-    sources_count: (a.sources || []).length
-  }));
+  let articles = (data || [])
+    .filter(a => {
+      if (!hideHelpersEnabled) return true;
+      const uname = String(a.users?.username || '').toLowerCase();
+      if (a.users?.is_helper) return false;
+      if (HIDDEN_USERNAMES.has(uname)) return false;
+      if (a.author_id && hiddenAuthorIds.has(a.author_id)) return false;
+      return true;
+    })
+    .map(a => ({
+      ...a,
+      sources_count: (a.sources || []).length
+    }));
 
   if (sortMode === 'for-you') {
     const now = Date.now();

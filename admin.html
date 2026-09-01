@@ -5,6 +5,77 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin — Vequence</title>
 <link rel="stylesheet" href="styles.css">
+<style>
+.admin-modal[hidden] { display: none !important; }
+.admin-modal {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.admin-modal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(15, 18, 16, 0.55);
+  backdrop-filter: blur(2px);
+}
+.admin-modal-panel {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: min(88vh, 720px);
+  overflow: auto;
+  background: var(--paper, #fff);
+  color: var(--ink, #171b18);
+  border: 1px solid var(--hairline, rgba(0,0,0,0.1));
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+.admin-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 16px 18px;
+  border-bottom: 1px solid var(--hairline, rgba(0,0,0,0.1));
+  position: sticky; top: 0; background: var(--paper, #fff); z-index: 1;
+}
+.admin-modal-head h2 { margin: 0; font-size: 18px; }
+.admin-modal-body { padding: 16px 18px 22px; }
+.admin-info-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 10px 14px;
+  font-size: 14px;
+}
+.admin-info-grid dt {
+  color: var(--ink-faint, #6b726e);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding-top: 2px;
+}
+.admin-info-grid dd { margin: 0; word-break: break-word; }
+.admin-info-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  object-fit: cover; background: var(--hairline);
+}
+.admin-info-note {
+  margin-top: 14px; padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--paper-raised, rgba(0,0,0,0.04));
+  font-size: 13px; color: var(--ink-soft, #444);
+}
+.admin-info-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.admin-info-stat {
+  border: 1px solid var(--hairline, rgba(0,0,0,0.1));
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: center;
+}
+.admin-info-stat strong { display: block; font-size: 18px; }
+.admin-info-stat span { font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+</style>
 </head>
 <body>
 <header id="site-header"></header>
@@ -70,6 +141,21 @@
     <div id="comments-list"></div>
   </section>
 </main>
+
+<!-- Account info modal -->
+<div id="user-info-modal" class="admin-modal" hidden>
+  <div class="admin-modal-backdrop" data-close-modal></div>
+  <div class="admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-info-title">
+    <div class="admin-modal-head">
+      <h2 id="user-info-title">Account info</h2>
+      <button type="button" class="icon-btn" id="user-info-close" title="Close" data-close-modal aria-label="Close">✕</button>
+    </div>
+    <div id="user-info-body" class="admin-modal-body">
+      <div class="admin-empty">Loading…</div>
+    </div>
+  </div>
+</div>
+
 <footer id="site-footer"></footer>
 
 <script type="module">
@@ -147,6 +233,7 @@ async function loadUsers() {
         ${u.banned_at && u.ban_reason ? `<div class="admin-ban-reason">Reason: ${escapeHtml(u.ban_reason)}</div>` : ''}
       </div>
       <div class="admin-actions">
+        <button class="btn btn-primary btn-sm" data-user-info="${escapeHtml(u.username)}">View account info</button>
         ${u.is_admin ? `<button class="btn btn-quiet btn-sm" data-user-admin="false" data-username="${escapeHtml(u.username)}">Remove admin</button>` : `<button class="btn btn-quiet btn-sm" data-user-admin="true" data-username="${escapeHtml(u.username)}">Make admin</button>`}
         ${u.banned_at ? `<button class="btn btn-quiet btn-sm" data-user-ban="false" data-username="${escapeHtml(u.username)}">Unban</button>` : `<button class="btn btn-danger btn-sm" data-user-ban="true" data-username="${escapeHtml(u.username)}">Ban</button>`}
       </div>
@@ -166,7 +253,88 @@ async function loadUsers() {
     } else if (!confirm(`Unban @${btn.dataset.username}?`)) return;
     try { await rpc('admin_set_user_banned', { p_username: btn.dataset.username, p_banned: ban, p_reason: reason }); toast(ban ? 'User banned' : 'User unbanned'); await refresh(); } catch (_) {}
   }));
+  el.querySelectorAll('[data-user-info]').forEach(btn => btn.addEventListener('click', () => {
+    openUserInfoModal(btn.dataset.userInfo);
+  }));
 }
+
+function closeUserInfoModal() {
+  const modal = document.getElementById('user-info-modal');
+  if (modal) modal.hidden = true;
+}
+
+async function openUserInfoModal(username) {
+  const modal = document.getElementById('user-info-modal');
+  const body = document.getElementById('user-info-body');
+  const title = document.getElementById('user-info-title');
+  if (!modal || !body) return;
+  modal.hidden = false;
+  title.textContent = `Account · @${username}`;
+  body.innerHTML = `<div class="admin-empty">Loading account info…</div>`;
+
+  try {
+    const info = await rpc('admin_get_user_info', { p_username: username });
+    const badges = [
+      info.is_admin ? '<span class="admin-badge">ADMIN</span>' : '',
+      info.is_helper ? '<span class="admin-badge">HELPER</span>' : '',
+      info.banned_at ? '<span class="ban-badge">BANNED</span>' : ''
+    ].filter(Boolean).join(' ');
+
+    const avatar = info.avatar_url
+      ? `<img class="admin-info-avatar" src="${escapeHtml(info.avatar_url)}" alt="">`
+      : `<div class="admin-info-avatar" style="display:flex;align-items:center;justify-content:center;font-weight:700;">${escapeHtml((info.display_name || info.username || '?').slice(0,1).toUpperCase())}</div>`;
+
+    body.innerHTML = `
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+        ${avatar}
+        <div>
+          <div style="font-size:18px;font-weight:700;">${escapeHtml(info.display_name || info.username || '')} ${badges}</div>
+          <div class="admin-meta">@${escapeHtml(info.username || '')}</div>
+        </div>
+      </div>
+
+      <div class="admin-info-stats">
+        <div class="admin-info-stat"><strong>${Number(info.article_count || 0)}</strong><span>Articles</span></div>
+        <div class="admin-info-stat"><strong>${Number(info.follower_count || 0)}</strong><span>Followers</span></div>
+        <div class="admin-info-stat"><strong>${Number(info.following_count || 0)}</strong><span>Following</span></div>
+        <div class="admin-info-stat"><strong>${Number(info.like_count || 0)}</strong><span>Likes given</span></div>
+        <div class="admin-info-stat"><strong>${Number(info.comment_count || 0)}</strong><span>Comments</span></div>
+      </div>
+
+      <dl class="admin-info-grid" style="margin-top:16px;">
+        <dt>Username</dt><dd>@${escapeHtml(info.username || '')}</dd>
+        <dt>Display name</dt><dd>${escapeHtml(info.display_name || '—')}</dd>
+        <dt>Email</dt><dd>${escapeHtml(info.email || '—')}</dd>
+        <dt>Password</dt><dd>•••••••• <span class="hint">(not retrievable)</span></dd>
+        <dt>User ID</dt><dd><code style="font-size:12px;">${escapeHtml(info.id || '')}</code></dd>
+        <dt>Helper account</dt><dd>${info.is_helper ? 'Yes' : 'No'}</dd>
+        <dt>Admin</dt><dd>${info.is_admin ? 'Yes' : 'No'}</dd>
+        <dt>Email confirmed</dt><dd>${info.email_confirmed_at ? escapeHtml(formatDate(info.email_confirmed_at)) : 'No'}</dd>
+        <dt>Last sign-in</dt><dd>${info.last_sign_in_at ? escapeHtml(formatDate(info.last_sign_in_at)) : '—'}</dd>
+        <dt>Joined</dt><dd>${info.created_at ? escapeHtml(formatDate(info.created_at)) : '—'}</dd>
+        <dt>Banned</dt><dd>${info.banned_at ? escapeHtml(formatDate(info.banned_at)) : 'No'}</dd>
+        ${info.ban_reason ? `<dt>Ban reason</dt><dd>${escapeHtml(info.ban_reason)}</dd>` : ''}
+        <dt>Bio</dt><dd>${escapeHtml(info.bio || '—')}</dd>
+      </dl>
+
+      <div class="admin-info-note">${escapeHtml(info.password_note || 'Passwords are stored as one-way hashes and cannot be viewed from the admin panel.')}</div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn btn-quiet btn-sm" href="profile.html?u=${encodeURIComponent(info.username || '')}" target="_blank" rel="noopener">Open profile</a>
+        <button type="button" class="btn btn-quiet btn-sm" data-close-modal>Close</button>
+      </div>
+    `;
+  } catch (err) {
+    body.innerHTML = `<div class="admin-empty">${escapeHtml(err.message || 'Could not load account info')}</div>`;
+  }
+}
+
+document.getElementById('user-info-modal')?.addEventListener('click', (e) => {
+  if (e.target.closest('[data-close-modal]')) closeUserInfoModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeUserInfoModal();
+});
+
 
 async function loadComments() {
   const search = document.getElementById('comment-search').value.trim() || null;
@@ -206,7 +374,11 @@ async function loadHelpers() {
         <h3>@${escapeHtml(u.username)} ${u.banned_at ? '<span class="admin-badge" style="background:#b33;">BANNED</span>' : '<span class="admin-badge">HELPER</span>'}</h3>
         <div class="admin-meta">${escapeHtml(u.display_name || '')} · ${helperEmail(u.username)} · ${formatDate(u.created_at)}</div>
       </div>
+      <div class="admin-actions">
+        <button class="btn btn-primary btn-sm" data-user-info="${escapeHtml(u.username)}">View account info</button>
+      </div>
     </div>`).join('');
+  el.querySelectorAll('[data-user-info]').forEach(btn => btn.addEventListener('click', () => openUserInfoModal(btn.dataset.userInfo)));
 }
 
 document.getElementById('helper-form').addEventListener('submit', async (e) => {

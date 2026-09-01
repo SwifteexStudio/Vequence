@@ -137,7 +137,7 @@
 </template>
 
 <script type="module">
-import { supabase, requireAuth, initHeader, renderMarkdown, slugify, readingTime, wordCount, toast, escapeHtml, ensureProfile } from './app.js';
+import { supabase, requireAuth, initHeader, renderMarkdown, slugify, readingTime, wordCount, toast, escapeHtml, ensureProfile, ensureEnglishArticle } from './app.js';
 
 let session = null;
 let articleId = qsParam('id');
@@ -364,18 +364,61 @@ async function saveArticle(status) {
   const originalText = btn.textContent;
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
 
-  const subtitle = document.getElementById('subtitle-input').value.trim();
+  let subtitle = document.getElementById('subtitle-input').value.trim();
   const category = document.getElementById('category-select').value;
-  const markdown = mdInput.value;
-  const evidenceSummary = document.getElementById('evidence-summary').value.trim();
+  let markdown = mdInput.value;
+  let evidenceSummary = document.getElementById('evidence-summary').value.trim();
   const sources = collectSources();
+  let publishTitle = title;
+  let didTranslate = false;
+  let sourceLang = 'en';
+
+  // On publish: if the article is not English, auto-translate title/body to English
+  if (status === 'published') {
+    btn.innerHTML = '<span class="spinner"></span> Checking language…';
+    try {
+      const result = await ensureEnglishArticle({
+        title: publishTitle,
+        subtitle,
+        markdown,
+        evidenceSummary
+      });
+      if (result.translated) {
+        didTranslate = true;
+        sourceLang = result.sourceLang || 'und';
+        publishTitle = result.title;
+        subtitle = result.subtitle || '';
+        markdown = result.markdown;
+        evidenceSummary = result.evidenceSummary || '';
+        // Reflect translation in the editor so the author sees what was published
+        document.getElementById('title-input').value = publishTitle;
+        document.getElementById('subtitle-input').value = subtitle;
+        mdInput.value = markdown;
+        const ev = document.getElementById('evidence-summary');
+        if (ev) ev.value = evidenceSummary;
+        updatePreview();
+        btn.innerHTML = '<span class="spinner"></span> Translated · publishing…';
+      } else {
+        btn.innerHTML = '<span class="spinner"></span>';
+      }
+    } catch (_) {
+      btn.innerHTML = '<span class="spinner"></span>';
+    }
+  }
+
+  const content = { markdown };
+  if (didTranslate) {
+    content.source_language = sourceLang;
+    content.auto_translated = true;
+    content.translated_at = new Date().toISOString();
+  }
 
   const payload = {
     // article_code is generated server-side by the database default
     author_id: session.user.id,
-    title,
+    title: publishTitle,
     subtitle: subtitle || null,
-    content: { markdown },
+    content,
     status,
     category: category || null,
     reading_time_minutes: readingTime(markdown),
@@ -384,12 +427,16 @@ async function saveArticle(status) {
   };
 
   if (status === 'published') payload.published_at = new Date().toISOString();
+  // Slug from (possibly translated) English title for new articles
+  if (!articleId && status === 'published') {
+    // slug assigned below still uses publishTitle via existing logic
+  }
 
   let savedId = articleId;
 
   try {
     if (!savedId) {
-      payload.slug = slugify(title) + '-' + Math.random().toString(36).slice(2, 7);
+      payload.slug = slugify(publishTitle || title) + '-' + Math.random().toString(36).slice(2, 7);
       const { data, error } = await supabase.from('articles').insert(payload).select('id').single();
       if (error) throw error;
       savedId = data.id;
@@ -413,7 +460,9 @@ async function saveArticle(status) {
     }
 
     document.getElementById('save-status').textContent = status === 'published' ? 'Published!' : 'Draft saved';
-    toast(status === 'published' ? 'Article published' : 'Draft saved');
+    toast(status === 'published'
+      ? (didTranslate ? `Translated from ${sourceLang} → English and published` : 'Article published')
+      : 'Draft saved');
 
     if (status === 'published') {
       const { data: a } = await supabase.from('articles').select('slug').eq('id', savedId).single();

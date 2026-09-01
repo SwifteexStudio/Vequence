@@ -565,6 +565,195 @@ export function initFooter() {
   `;
 }
 
+
+// ------------------------------------------------------------
+// Language detection + auto-translate to English (on publish)
+// Uses MyMemory free API (no key). Markdown structure is preserved:
+// code fences are left untouched; other blocks are translated.
+// ------------------------------------------------------------
+
+const TRANSLATE_ENDPOINT = 'https://api.mymemory.translated.net/get';
+
+function sampleForLanguageDetect(text) {
+  const cleaned = String(text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`]+`/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, ' ')
+    .replace(/\[[^\]]*\]\([^)]+\)/g, ' ')
+    .replace(/[#>*_\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned.slice(0, 400);
+}
+
+/**
+ * Detect language code for a text sample.
+ * Returns 'en' when unsure or on failure (fail-open so publish is never blocked).
+ */
+export async function detectLanguage(text) {
+  const sample = sampleForLanguageDetect(text);
+  if (!sample || sample.length < 12) return 'en';
+
+  const cjk = (sample.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length;
+  const cyr = (sample.match(/[\u0400-\u04FF]/g) || []).length;
+  const arab = (sample.match(/[\u0600-\u06FF]/g) || []).length;
+  const letters = (sample.match(/\p{L}/gu) || []).length || 1;
+  if (cjk / letters > 0.25) return 'zh';
+  if (cyr / letters > 0.25) return 'ru';
+  if (arab / letters > 0.25) return 'ar';
+
+  try {
+    const url = TRANSLATE_ENDPOINT + '?q=' + encodeURIComponent(sample) + '&langpair=aut|en';
+    const res = await fetch(url);
+    if (!res.ok) return 'en';
+    const data = await res.json();
+    let detected =
+      (data && data.responseData && data.responseData.detectedLanguage) ||
+      (data && data.matches && data.matches[0] && data.matches[0].source) ||
+      null;
+    // Some responses nest differently
+    if (!detected && data && data.responseData && typeof data.responseData.translatedText === 'string') {
+      // If aut|en and text barely changed + high match, treat as English later
+    }
+    let code = String(detected || '').toLowerCase().split(/[-_]/)[0];
+    if (!/^[a-z]{2,3}$/.test(code)) {
+      // Fallback: if translation is nearly identical, assume English
+      const translated = (data && data.responseData && data.responseData.translatedText) || '';
+      if (translated && translated.trim().toLowerCase() === sample.trim().toLowerCase()) return 'en';
+      code = 'en';
+    }
+    return code;
+  } catch (_) {
+    return 'en';
+  }
+}
+
+async function translatePlainChunk(text, sourceLang) {
+  const q = String(text || '');
+  if (!q.trim()) return q;
+  try {
+    const url =
+      TRANSLATE_ENDPOINT +
+      '?q=' + encodeURIComponent(q.slice(0, 450)) +
+      '&langpair=' + encodeURIComponent(sourceLang + '|en');
+    const res = await fetch(url);
+    if (!res.ok) return q;
+    const data = await res.json();
+    const out = data && data.responseData && data.responseData.translatedText;
+    if (!out || /INVALID SOURCE LANGUAGE|QUERY LENGTH LIMIT/i.test(out)) return q;
+    return out;
+  } catch (_) {
+    return q;
+  }
+}
+
+/** Split long plain text into ~400 char chunks on whitespace/sentence boundaries. */
+function chunkText(text, maxLen = 400) {
+  const s = String(text || '');
+  if (s.length <= maxLen) return [s];
+  const parts = [];
+  let rest = s;
+  while (rest.length > maxLen) {
+    let cut = rest.lastIndexOf(' ', maxLen);
+    if (cut < maxLen * 0.5) cut = maxLen;
+    parts.push(rest.slice(0, cut));
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
+export async function translateTextToEnglish(text, sourceLang = 'aut') {
+  const chunks = chunkText(text, 400);
+  const out = [];
+  for (const c of chunks) {
+    out.push(await translatePlainChunk(c, sourceLang === 'en' ? 'aut' : sourceLang));
+  }
+  return out.join(' ');
+}
+
+/**
+ * Translate markdown to English while preserving fenced code blocks.
+ * Other segments are translated as plain text (headings markers kept lightly).
+ */
+export async function translateMarkdownToEnglish(markdown, sourceLang = 'aut') {
+  const src = String(markdown || '');
+  if (!src.trim()) return src;
+
+  const parts = [];
+  const re = /```[\s\S]*?```/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    if (m.index > last) parts.push({ type: 'text', value: src.slice(last, m.index) });
+    parts.push({ type: 'code', value: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < src.length) parts.push({ type: 'text', value: src.slice(last) });
+
+  const out = [];
+  for (const p of parts) {
+    if (p.type === 'code') {
+      out.push(p.value);
+      continue;
+    }
+    // Translate paragraph-ish slices to keep structure
+    const blocks = p.value.split(/(\n{2,})/);
+    for (const block of blocks) {
+      if (/^\n+$/.test(block) || !block.trim()) {
+        out.push(block);
+        continue;
+      }
+      // Keep pure markdown-only lines (hr, empty headings) as-is
+      if (/^\s*(---+|\*\s*\*\s*\*)\s*$/.test(block)) {
+        out.push(block);
+        continue;
+      }
+      const translated = await translateTextToEnglish(block, sourceLang);
+      out.push(translated);
+    }
+  }
+  return out.join('');
+}
+
+/**
+ * If the article is not English, translate title/subtitle/body/evidence to English.
+ * Returns { title, subtitle, markdown, evidenceSummary, translated, sourceLang }.
+ * Fail-open: on errors, returns originals with translated:false.
+ */
+export async function ensureEnglishArticle({ title, subtitle, markdown, evidenceSummary }) {
+  const probe = [title, subtitle, markdown].filter(Boolean).join('\n\n');
+  let sourceLang = 'en';
+  try {
+    sourceLang = await detectLanguage(probe);
+  } catch (_) {
+    sourceLang = 'en';
+  }
+
+  if (!sourceLang || sourceLang === 'en') {
+    return { title, subtitle, markdown, evidenceSummary, translated: false, sourceLang: 'en' };
+  }
+
+  try {
+    const [tTitle, tSub, tMd, tEv] = await Promise.all([
+      title ? translateTextToEnglish(title, sourceLang) : Promise.resolve(title),
+      subtitle ? translateTextToEnglish(subtitle, sourceLang) : Promise.resolve(subtitle),
+      markdown ? translateMarkdownToEnglish(markdown, sourceLang) : Promise.resolve(markdown),
+      evidenceSummary ? translateTextToEnglish(evidenceSummary, sourceLang) : Promise.resolve(evidenceSummary)
+    ]);
+    return {
+      title: tTitle || title,
+      subtitle: tSub || subtitle,
+      markdown: tMd || markdown,
+      evidenceSummary: tEv || evidenceSummary,
+      translated: true,
+      sourceLang
+    };
+  } catch (_) {
+    return { title, subtitle, markdown, evidenceSummary, translated: false, sourceLang };
+  }
+}
+
 export const INTEREST_TOPICS = [
   'Neuroscience', 'Technology', 'Health', 'Economics',
   'Physics', 'Psychology', 'Climate', 'AI & ML'
