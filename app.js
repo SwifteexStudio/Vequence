@@ -504,6 +504,89 @@ function settingsIcon() {
   return `<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`;
 }
 
+function discoverIcon() {
+  return `<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;
+}
+
+function writeIcon() {
+  return `<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
+}
+
+function wireAccountMenu(btn, dd) {
+  if (!btn || !dd) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = dd.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', () => {
+    dd.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  });
+  dd.addEventListener('click', (e) => e.stopPropagation());
+}
+
+function accountMenuHtml(profile) {
+  return `
+    <div class="header-dropdown bottom-account-menu" id="user-dropdown">
+      <a href="profile.html?u=${encodeURIComponent(profile?.username || '')}">Your profile</a>
+      <a href="editor.html">Write an article</a>
+      <a href="settings.html">Settings</a>
+      ${profile?.is_admin ? '<a href="admin.html" class="admin-menu-link">Admin</a>' : ''}
+      <button type="button" id="logout-btn">Sign out</button>
+    </div>`;
+}
+
+function renderBottomNav(session, profile, activeLink) {
+  let bar = document.getElementById('bottom-tab-bar');
+  if (!bar) {
+    bar = document.createElement('nav');
+    bar.id = 'bottom-tab-bar';
+    bar.className = 'bottom-tab-bar';
+    bar.setAttribute('aria-label', 'Primary');
+    document.body.appendChild(bar);
+  }
+  document.body.classList.add('has-bottom-tabs');
+
+  if (!session) {
+    bar.innerHTML = `
+      <a href="index.html" class="bottom-tab ${activeLink === 'discover' ? 'active' : ''}">
+        ${discoverIcon()}<span>Discover</span>
+      </a>
+      <a href="auth.html" class="bottom-tab bottom-tab-avatar">
+        <span class="bottom-tab-avatar-ring"><span class="avatar" style="width:36px;height:36px;font-size:13px;">?</span></span>
+        <span>Sign in</span>
+      </a>
+      <a href="auth.html" class="bottom-tab">
+        ${writeIcon()}<span>Write</span>
+      </a>`;
+    return;
+  }
+
+  bar.innerHTML = `
+    <a href="index.html" class="bottom-tab ${activeLink === 'discover' ? 'active' : ''}">
+      ${discoverIcon()}<span>Discover</span>
+    </a>
+    <div class="bottom-tab bottom-tab-avatar header-user">
+      <button type="button" class="bottom-tab-avatar-btn" id="user-menu-btn" title="Account" aria-haspopup="true" aria-expanded="false">
+        <span class="bottom-tab-avatar-ring ${activeLink === 'profile' || activeLink === 'settings' ? 'active' : ''}">
+          ${avatarHtml(profile, 36)}
+        </span>
+        <span>You</span>
+      </button>
+      ${accountMenuHtml(profile)}
+    </div>
+    <a href="editor.html" class="bottom-tab ${activeLink === 'write' ? 'active' : ''}">
+      ${writeIcon()}<span>Write</span>
+    </a>`;
+
+  const btn = document.getElementById('user-menu-btn');
+  const dd = document.getElementById('user-dropdown');
+  wireAccountMenu(btn, dd);
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', signOut);
+}
+
 export async function initHeader(activeLink) {
   const mount = document.getElementById('site-header');
   if (!mount) return;
@@ -512,45 +595,22 @@ export async function initHeader(activeLink) {
   const session = await getSession();
   const profile = session ? await getCurrentProfile() : null;
 
-  // Order: [avatar] Discover Write · Settings  (or Sign in when logged out)
+  // Top bar: brand + search only. Discover / profile / Write live in the bottom tabs.
   mount.innerHTML = `
     <div class="shell">
       <a href="index.html" class="wordmark">Ve<span>quence</span></a>
       <form class="header-search" action="index.html" method="get">
         <input type="text" name="q" placeholder="Search articles and people" value="${escapeHtml(qs('q') || '')}">
       </form>
-      <nav class="header-nav">
-        ${session ? `
-          <div class="header-user">
-            <button class="header-user-btn" id="user-menu-btn" title="Account">
-              ${avatarHtml(profile)}
-            </button>
-            <div class="header-dropdown" id="user-dropdown">
-              <a href="profile.html?u=${encodeURIComponent(profile?.username || '')}">Your profile</a>
-              <a href="editor.html">Write an article</a>
-              <a href="settings.html">Settings</a>
-              ${profile?.is_admin ? '<a href="admin.html" class="admin-menu-link">Admin</a>' : ''}
-              <button id="logout-btn">Sign out</button>
-            </div>
-          </div>
-        ` : ''}
-        <a href="index.html" class="nav-link ${activeLink === 'discover' ? 'active' : ''}">Discover</a>
+      <nav class="header-nav header-nav-compact">
         ${session
-          ? `<a href="editor.html" class="nav-link ${activeLink === 'write' ? 'active' : ''}">Write</a>
-             <a href="settings.html" class="nav-link nav-icon-link ${activeLink === 'settings' ? 'active' : ''}" title="Settings">${settingsIcon()}</a>`
+          ? (profile?.is_admin ? `<a href="admin.html" class="nav-link">Admin</a>` : '')
           : `<a href="auth.html" class="btn btn-outline btn-sm">Sign in</a>`}
       </nav>
     </div>
   `;
 
-  const btn = document.getElementById('user-menu-btn');
-  const dd = document.getElementById('user-dropdown');
-  if (btn && dd) {
-    btn.addEventListener('click', (e) => { e.stopPropagation(); dd.classList.toggle('open'); });
-    document.addEventListener('click', () => dd.classList.remove('open'));
-  }
-  const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) logoutBtn.addEventListener('click', signOut);
+  renderBottomNav(session, profile, activeLink || '');
 
   return { session, profile };
 }

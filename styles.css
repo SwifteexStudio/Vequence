@@ -1344,3 +1344,123 @@ sup.citation-ref a:hover { text-decoration: underline; }
 
 .admin-badge { display:inline-block; vertical-align:middle; color:var(--evergreen-dark); background:var(--evergreen-wash); border:1px solid color-mix(in srgb,var(--evergreen) 22%,var(--hairline)); font-size:9px; line-height:1; font-weight:700; letter-spacing:.08em; padding:4px 6px; border-radius:99px; }
 .article-code-inline { font-family:var(--font-mono); font-size:11px; color:var(--ink-faint); }
+
+
+/* ---------- Bottom tab bar (Discover · Profile · Write) ---------- */
+
+body.has-bottom-tabs {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9000;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: center;
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
+  padding: 0 8px env(safe-area-inset-bottom, 0px);
+  background: var(--paper, #fff);
+  border-top: 1px solid var(--hairline, rgba(0,0,0,0.1));
+  box-shadow: 0 -6px 20px rgba(23, 27, 24, 0.06);
+}
+
+[data-theme="dark"] .bottom-tab-bar {
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.35);
+}
+
+.bottom-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 56px;
+  padding: 6px 8px;
+  text-decoration: none;
+  color: var(--ink-faint, #6b726e);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  position: relative;
+}
+
+.bottom-tab:hover { color: var(--ink); }
+.bottom-tab.active { color: var(--evergreen, #2f6f5e); }
+
+.bottom-tab .tab-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.bottom-tab-avatar {
+  position: relative;
+}
+
+.bottom-tab-avatar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+}
+
+.bottom-tab-avatar-ring {
+  display: inline-flex;
+  border-radius: 50%;
+  padding: 2px;
+  border: 2px solid transparent;
+  line-height: 0;
+}
+
+.bottom-tab-avatar-ring.active,
+.bottom-tab-avatar-btn[aria-expanded="true"] .bottom-tab-avatar-ring {
+  border-color: var(--evergreen, #2f6f5e);
+}
+
+.bottom-tab-avatar .avatar {
+  width: 36px !important;
+  height: 36px !important;
+  font-size: 13px !important;
+}
+
+/* Account menu opens upward from the center tab */
+.bottom-tab-bar .header-user {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.bottom-tab-bar .bottom-account-menu.header-dropdown {
+  top: auto;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  min-width: 200px;
+  display: none;
+  overflow: hidden;
+}
+
+.bottom-tab-bar .bottom-account-menu.header-dropdown.open {
+  display: block;
+}
+
+.header-nav-compact {
+  gap: 8px;
+}
+
