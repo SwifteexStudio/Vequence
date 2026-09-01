@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groups — Vequence</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+.admin-modal[hidden] { display: none !important; }
+.admin-modal {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.admin-modal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(15, 18, 16, 0.55);
+  backdrop-filter: blur(2px);
+}
+.admin-modal-panel {
+  position: relative;
+  width: min(480px, 100%);
+  max-height: min(90vh, 720px);
+  overflow: auto;
+  background: var(--paper, #fff);
+  color: var(--ink, #171b18);
+  border: 1px solid var(--hairline, rgba(0,0,0,0.1));
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+.admin-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 16px 18px;
+  border-bottom: 1px solid var(--hairline, rgba(0,0,0,0.1));
+  position: sticky; top: 0; background: var(--paper, #fff); z-index: 1;
+}
+.admin-modal-head h2 { margin: 0; font-size: 18px; }
+.admin-modal-body { padding: 16px 18px 22px; }
+</style>
+</head>
+<body>
+<header id="site-header"></header>
+
+<main class="shell-narrow" style="padding-top:36px;padding-bottom:40px;">
+  <div id="groups-home">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h1 class="page-title">Groups</h1>
+        <p class="page-sub">Create a circle, invite people, and chat together.</p>
+      </div>
+      <div class="group-toolbar" style="margin:0;">
+        <button type="button" class="btn btn-primary btn-sm" id="open-create-btn">+ Create group</button>
+        <button type="button" class="btn btn-quiet btn-sm" id="open-join-btn">Join a group</button>
+      </div>
+    </div>
+
+    <div id="my-groups"></div>
+  </div>
+
+  <div id="group-detail" style="display:none;"></div>
+</main>
+
+<!-- Create group modal -->
+<div id="create-modal" class="admin-modal" hidden>
+  <div class="admin-modal-backdrop" data-close="create-modal"></div>
+  <div class="admin-modal-panel group-modal-panel" role="dialog" aria-modal="true">
+    <div class="admin-modal-head">
+      <h2>Create a group</h2>
+      <button type="button" class="icon-btn" data-close="create-modal" aria-label="Close">✕</button>
+    </div>
+    <div class="admin-modal-body">
+      <form id="create-group-form">
+        <div class="field">
+          <label for="cg-name">Group name</label>
+          <input id="cg-name" required maxlength="80" placeholder="Lab reading circle">
+        </div>
+        <div class="field">
+          <label for="cg-desc">Description</label>
+          <textarea id="cg-desc" rows="3" maxlength="500" placeholder="What is this group for?"></textarea>
+        </div>
+        <div class="field">
+          <label>Group icon</label>
+          <div class="image-upload-zone" id="cg-icon-zone">
+            <span id="cg-icon-label">📷 Add a group icon (optional) — click to upload</span>
+            <input type="file" id="cg-icon-input" accept="image/*" style="display:none;">
+          </div>
+          <img id="cg-icon-preview" alt="" style="display:none;width:72px;height:72px;border-radius:14px;object-fit:cover;margin-top:10px;">
+          <input type="hidden" id="cg-icon-url" value="">
+          <div class="hint">Same as article covers — upload from your device. Leave blank to use initials.</div>
+        </div>
+        <div class="field">
+          <label for="cg-join">Who can join?</label>
+          <select id="cg-join">
+            <option value="code">Invite code only (recommended)</option>
+            <option value="public">Public — anyone can join</option>
+            <option value="invite">Invite-only (no public codes)</option>
+          </select>
+        </div>
+        <div class="error" id="cg-error" style="display:none;margin-bottom:10px;"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="cg-submit">Create group</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Join modal -->
+<div id="join-modal" class="admin-modal" hidden>
+  <div class="admin-modal-backdrop" data-close="join-modal"></div>
+  <div class="admin-modal-panel group-modal-panel" role="dialog" aria-modal="true">
+    <div class="admin-modal-head">
+      <h2>Join a group</h2>
+      <button type="button" class="icon-btn" data-close="join-modal" aria-label="Close">✕</button>
+    </div>
+    <div class="admin-modal-body">
+      <form id="join-code-form" style="margin-bottom:22px;">
+        <div class="field">
+          <label for="join-code">Invite code</label>
+          <input id="join-code" placeholder="e.g. A1B2C3D4" autocomplete="off" style="text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono);">
+        </div>
+        <div class="error" id="join-code-error" style="display:none;margin-bottom:10px;"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="join-code-btn">Join with code</button>
+      </form>
+      <div class="section-label">Public groups</div>
+      <div id="public-groups-list"><div class="admin-empty">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<footer id="site-footer"></footer>
+
+<script type="module">
+import {
+  supabase, requireAuth, initHeader, initFooter, escapeHtml, formatDate,
+  avatarHtml, toast, timeAgo
+} from './app.js';
+
+const session = await requireAuth('auth.html');
+if (!session) throw new Error('redirect');
+await initHeader('groups');
+initFooter();
+
+const homeEl = document.getElementById('groups-home');
+const detailEl = document.getElementById('group-detail');
+const myGroupsEl = document.getElementById('my-groups');
+
+let myGroups = [];
+let activeGroup = null;
+let activeRole = null;
+let messagesChannel = null;
+let createIconUrl = null;
+
+async function uploadGroupIcon(file) {
+  if (!file) return null;
+  if (!file.type.startsWith('image/')) {
+    toast('Please choose an image file', 'error');
+    return null;
+  }
+  const path = `groups/${session.user.id}/icon-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+  const { error } = await supabase.storage.from('articles').upload(path, file);
+  if (error) {
+    toast('Upload failed: ' + error.message, 'error');
+    return null;
+  }
+  const { data } = supabase.storage.from('articles').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// Create-modal icon upload (device file → storage, same as article covers)
+const cgZone = document.getElementById('cg-icon-zone');
+const cgInput = document.getElementById('cg-icon-input');
+const cgPreview = document.getElementById('cg-icon-preview');
+const cgIconUrl = document.getElementById('cg-icon-url');
+cgZone?.addEventListener('click', () => cgInput?.click());
+cgInput?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  document.getElementById('cg-icon-label').textContent = 'Uploading…';
+  const url = await uploadGroupIcon(file);
+  if (url) {
+    createIconUrl = url;
+    cgIconUrl.value = url;
+    cgPreview.src = url;
+    cgPreview.style.display = 'block';
+    document.getElementById('cg-icon-label').textContent = 'Icon set — click to change';
+    toast('Icon uploaded');
+  } else {
+    document.getElementById('cg-icon-label').textContent = '📷 Add a group icon (optional) — click to upload';
+  }
+  e.target.value = '';
+});
+
+const params = new URLSearchParams(window.location.search);
+const openSlug = params.get('g') || params.get('slug');
+
+function openModal(id) {
+  const m = document.getElementById(id);
+  if (m) m.hidden = false;
+}
+function closeModal(id) {
+  const m = document.getElementById(id);
+  if (m) m.hidden = true;
+}
+document.querySelectorAll('[data-close]').forEach(el => {
+  el.addEventListener('click', () => closeModal(el.dataset.close));
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeModal('create-modal');
+    closeModal('join-modal');
+  }
+});
+
+document.getElementById('open-create-btn').addEventListener('click', () => openModal('create-modal'));
+document.getElementById('open-join-btn').addEventListener('click', async () => {
+  openModal('join-modal');
+  await loadPublicGroups();
+});
+
+function groupIconHtml(g, size = 48) {
+  if (g.icon_url) {
+    return `<span class="group-icon" style="width:${size}px;height:${size}px;"><img src="${escapeHtml(g.icon_url)}" alt=""></span>`;
+  }
+  const letter = (g.name || '?').trim().charAt(0).toUpperCase();
+  return `<span class="group-icon" style="width:${size}px;height:${size}px;">${escapeHtml(letter)}</span>`;
+}
+
+async function loadMyGroups() {
+  myGroupsEl.innerHTML = `<div class="admin-empty">Loading your groups…</div>`;
+  const { data, error } = await supabase.rpc('list_my_groups');
+  if (error) {
+    myGroupsEl.innerHTML = `<div class="admin-empty">${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  myGroups = data || [];
+  if (!myGroups.length) {
+    myGroupsEl.innerHTML = `
+      <div class="empty-state" style="padding:48px 12px;">
+        <h3>No groups yet</h3>
+        <p>Create a group or join one with an invite code.</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px;">
+          <button type="button" class="btn btn-primary btn-sm" id="empty-create">+ Create group</button>
+          <button type="button" class="btn btn-quiet btn-sm" id="empty-join">Join a group</button>
+        </div>
+      </div>`;
+    document.getElementById('empty-create')?.addEventListener('click', () => openModal('create-modal'));
+    document.getElementById('empty-join')?.addEventListener('click', async () => {
+      openModal('join-modal');
+      await loadPublicGroups();
+    });
+    return;
+  }
+
+  myGroupsEl.innerHTML = `
+    <div class="section-label">Your groups</div>
+    <div class="group-grid">
+      ${myGroups.map(g => `
+        <a href="groups.html?g=${encodeURIComponent(g.slug)}" class="group-card" data-slug="${escapeHtml(g.slug)}">
+          <div class="group-card-top">
+            ${groupIconHtml(g)}
+            <div>
+              <h3>${escapeHtml(g.name)}</h3>
+              <div class="group-meta">${Number(g.member_count || 0)} members · ${escapeHtml(g.role || 'member')}</div>
+            </div>
+          </div>
+          ${g.description ? `<p>${escapeHtml(g.description)}</p>` : ''}
+        </a>
+      `).join('')}
+    </div>`;
+}
+
+async function loadPublicGroups() {
+  const el = document.getElementById('public-groups-list');
+  el.innerHTML = `<div class="admin-empty">Loading…</div>`;
+  const { data, error } = await supabase.rpc('list_public_groups');
+  if (error) {
+    el.innerHTML = `<div class="admin-empty">${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  if (!data?.length) {
+    el.innerHTML = `<div class="admin-empty">No public groups available right now.</div>`;
+    return;
+  }
+  el.innerHTML = data.map(g => `
+    <div class="admin-row">
+      <div class="admin-row-main">
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${groupIconHtml(g, 36)}
+          <div>
+            <strong>${escapeHtml(g.name)}</strong>
+            <div class="admin-meta">${Number(g.member_count || 0)} members</div>
+          </div>
+        </div>
+        ${g.description ? `<div class="admin-meta" style="margin-top:6px;">${escapeHtml(g.description)}</div>` : ''}
+      </div>
+      <div class="admin-actions">
+        <button type="button" class="btn btn-primary btn-sm" data-join-public="${escapeHtml(g.id)}">Join</button>
+      </div>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('[data-join-public]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const { error: err } = await supabase.rpc('join_group_public', { p_group_id: btn.dataset.joinPublic });
+      if (err) { toast(err.message, 'error'); btn.disabled = false; return; }
+      toast('Joined group');
+      closeModal('join-modal');
+      const { data: g } = await supabase.from('groups').select('slug').eq('id', btn.dataset.joinPublic).single();
+      if (g?.slug) window.location.href = `groups.html?g=${encodeURIComponent(g.slug)}`;
+      else await loadMyGroups();
+    });
+  });
+}
+
+document.getElementById('create-group-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('cg-error');
+  errEl.style.display = 'none';
+  const btn = document.getElementById('cg-submit');
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  const name = document.getElementById('cg-name').value.trim();
+  const description = document.getElementById('cg-desc').value.trim();
+  const icon_url = (document.getElementById('cg-icon-url').value || createIconUrl || '').trim();
+  const join_mode = document.getElementById('cg-join').value;
+
+  const { data, error } = await supabase.rpc('create_group', {
+    p_name: name,
+    p_description: description || null,
+    p_icon_url: icon_url || null,
+    p_join_mode: join_mode
+  });
+
+  btn.disabled = false;
+  btn.textContent = original;
+
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  toast('Group created');
+  closeModal('create-modal');
+  document.getElementById('create-group-form').reset();
+  createIconUrl = null;
+  if (cgIconUrl) cgIconUrl.value = '';
+  if (cgPreview) { cgPreview.style.display = 'none'; cgPreview.removeAttribute('src'); }
+  const lab = document.getElementById('cg-icon-label');
+  if (lab) lab.textContent = '📷 Add a group icon (optional) — click to upload';
+  window.location.href = `groups.html?g=${encodeURIComponent(data.slug)}`;
+});
+
+document.getElementById('join-code-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('join-code-error');
+  errEl.style.display = 'none';
+  const btn = document.getElementById('join-code-btn');
+  const code = document.getElementById('join-code').value.trim();
+  if (!code) return;
+  btn.disabled = true;
+  const { data, error } = await supabase.rpc('join_group_by_code', { p_code: code });
+  btn.disabled = false;
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  toast('Joined group');
+  closeModal('join-modal');
+  window.location.href = `groups.html?g=${encodeURIComponent(data.slug)}`;
+});
+
+function unsubscribeChat() {
+  if (messagesChannel) {
+    try { supabase.removeChannel(messagesChannel); } catch (_) {}
+    messagesChannel = null;
+  }
+}
+
+async function openGroupBySlug(slug) {
+  homeEl.style.display = 'none';
+  detailEl.style.display = 'block';
+  detailEl.innerHTML = `<div class="admin-empty">Loading group…</div>`;
+  unsubscribeChat();
+
+  const { data: g, error } = await supabase
+    .from('groups')
+    .select('*')
+    .eq('slug', slug)
+    .single();
+
+  if (error || !g) {
+    detailEl.innerHTML = `<div class="empty-state"><h3>Group not found</h3><p><a href="groups.html">Back to groups</a></p></div>`;
+    return;
+  }
+
+  const { data: membership } = await supabase
+    .from('group_members')
+    .select('role, banned_at')
+    .eq('group_id', g.id)
+    .eq('user_id', session.user.id)
+    .maybeSingle();
+
+  if (!membership || membership.banned_at) {
+    detailEl.innerHTML = `<div class="empty-state"><h3>You are not a member</h3><p>Join with a code or from public groups.</p><a href="groups.html" class="btn btn-outline btn-sm" style="margin-top:12px;">Back</a></div>`;
+    return;
+  }
+
+  activeGroup = g;
+  activeRole = membership.role;
+  const isOwner = membership.role === 'owner' || g.owner_id === session.user.id;
+
+  detailEl.innerHTML = `
+    <p style="margin:0 0 12px;"><a href="groups.html" class="hint" style="color:var(--evergreen-dark);font-weight:600;">← All groups</a></p>
+    <div class="group-card-top" style="margin-bottom:18px;">
+      ${groupIconHtml(g, 56)}
+      <div style="flex:1;min-width:0;">
+        <h1 class="page-title" style="font-size:28px;margin-bottom:4px;">${escapeHtml(g.name)}</h1>
+        <div class="group-meta">Join: ${escapeHtml(g.join_mode)} · You are ${escapeHtml(membership.role)}</div>
+        ${g.description ? `<p style="margin:8px 0 0;color:var(--ink-soft);font-size:14px;">${escapeHtml(g.description)}</p>` : ''}
+      </div>
+    </div>
+
+    <div class="profile-tabs" id="group-tabs">
+      <button type="button" data-tab="chat" class="active">Chat</button>
+      <button type="button" data-tab="members">Members</button>
+      ${isOwner ? `<button type="button" data-tab="invites">Invite codes</button>` : ''}
+      ${isOwner ? `<button type="button" data-tab="settings">Settings</button>` : ''}
+    </div>
+    <div id="group-tab-content"></div>
+  `;
+
+  const tabs = detailEl.querySelectorAll('#group-tabs button');
+  tabs.forEach(btn => btn.addEventListener('click', () => {
+    tabs.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderGroupTab(btn.dataset.tab, isOwner);
+  }));
+
+  await renderGroupTab('chat', isOwner);
+}
+
+async function renderGroupTab(tab, isOwner) {
+  const el = document.getElementById('group-tab-content');
+  if (!el || !activeGroup) return;
+
+  if (tab === 'chat') {
+    el.innerHTML = `
+      <div class="group-chat" style="margin-top:12px;">
+        <div class="group-chat-messages" id="chat-messages"><div class="admin-empty">Loading messages…</div></div>
+        <form class="group-chat-form" id="chat-form">
+          <input id="chat-input" maxlength="4000" placeholder="Write a message…" autocomplete="off">
+          <button type="submit" class="btn btn-primary btn-sm">Send</button>
+        </form>
+      </div>`;
+    await loadMessages();
+    subscribeMessages();
+    document.getElementById('chat-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('chat-input');
+      const content = input.value.trim();
+      if (!content) return;
+      input.value = '';
+      const { error } = await supabase.from('group_messages').insert({
+        group_id: activeGroup.id,
+        user_id: session.user.id,
+        content
+      });
+      if (error) toast(error.message, 'error');
+      else await loadMessages();
+    });
+    return;
+  }
+
+  if (tab === 'members') {
+    el.innerHTML = `<div class="admin-empty">Loading members…</div>`;
+    const { data, error } = await supabase
+      .from('group_members')
+      .select('user_id, role, banned_at, ban_reason, joined_at, users(username, display_name, avatar_url)')
+      .eq('group_id', activeGroup.id)
+      .order('joined_at', { ascending: true });
+    if (error) { el.innerHTML = `<div class="admin-empty">${escapeHtml(error.message)}</div>`; return; }
+
+    el.innerHTML = `<div class="group-members-list" style="margin-top:8px;">${(data || []).map(m => {
+      const u = m.users || {};
+      const canMod = isOwner && m.user_id !== session.user.id && m.role !== 'owner';
+      return `
+        <div class="admin-row">
+          <div class="admin-row-main" style="display:flex;align-items:center;gap:10px;">
+            ${avatarHtml(u, 36)}
+            <div>
+              <div><strong>${escapeHtml(u.display_name || u.username || 'Member')}</strong>
+                <span class="admin-badge">${escapeHtml(m.role)}</span>
+                ${m.banned_at ? '<span class="ban-badge">BANNED</span>' : ''}
+              </div>
+              <div class="admin-meta">@${escapeHtml(u.username || '')} · joined ${formatDate(m.joined_at)}</div>
+              ${m.ban_reason ? `<div class="admin-ban-reason">${escapeHtml(m.ban_reason)}</div>` : ''}
+            </div>
+          </div>
+          ${canMod ? `<div class="admin-actions">
+            ${m.banned_at
+              ? `<button type="button" class="btn btn-quiet btn-sm" data-unban="${m.user_id}">Unban</button>`
+              : `<button type="button" class="btn btn-quiet btn-sm" data-kick="${m.user_id}">Kick</button>
+                 <button type="button" class="btn btn-danger btn-sm" data-ban="${m.user_id}">Ban</button>`}
+          </div>` : ''}
+        </div>`;
+    }).join('')}</div>`;
+
+    el.querySelectorAll('[data-kick]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('Remove this member from the group?')) return;
+      const { error: err } = await supabase.rpc('group_kick_member', {
+        p_group_id: activeGroup.id,
+        p_user_id: btn.dataset.kick
+      });
+      if (err) toast(err.message, 'error');
+      else { toast('Member removed'); renderGroupTab('members', isOwner); }
+    }));
+    el.querySelectorAll('[data-ban]').forEach(btn => btn.addEventListener('click', async () => {
+      const reason = prompt('Ban reason (optional):') || '';
+      if (!confirm('Ban this member?')) return;
+      const { error: err } = await supabase.rpc('group_ban_member', {
+        p_group_id: activeGroup.id,
+        p_user_id: btn.dataset.ban,
+        p_reason: reason
+      });
+      if (err) toast(err.message, 'error');
+      else { toast('Member banned'); renderGroupTab('members', isOwner); }
+    }));
+    el.querySelectorAll('[data-unban]').forEach(btn => btn.addEventListener('click', async () => {
+      const { error: err } = await supabase.rpc('group_unban_member', {
+        p_group_id: activeGroup.id,
+        p_user_id: btn.dataset.unban
+      });
+      if (err) toast(err.message, 'error');
+      else { toast('Member unbanned'); renderGroupTab('members', isOwner); }
+    }));
+    return;
+  }
+
+
+  if (tab === 'settings' && isOwner) {
+    el.innerHTML = `
+      <form id="group-settings-form" style="margin-top:16px;">
+        <div class="field">
+          <label for="gs-name">Group name</label>
+          <input id="gs-name" required maxlength="80" value="${escapeHtml(activeGroup.name || '')}">
+        </div>
+        <div class="field">
+          <label for="gs-desc">Description</label>
+          <textarea id="gs-desc" rows="3" maxlength="500">${escapeHtml(activeGroup.description || '')}</textarea>
+        </div>
+        <div class="field">
+          <label>Group icon</label>
+          <div class="image-upload-zone" id="gs-icon-zone">
+            <span id="gs-icon-label">${activeGroup.icon_url ? 'Icon set — click to change' : '📷 Upload icon from device'}</span>
+            <input type="file" id="gs-icon-input" accept="image/*" style="display:none;">
+          </div>
+          <img id="gs-icon-preview" alt="" src="${escapeHtml(activeGroup.icon_url || '')}"
+            style="${activeGroup.icon_url ? '' : 'display:none;'}width:72px;height:72px;border-radius:14px;object-fit:cover;margin-top:10px;">
+          <input type="hidden" id="gs-icon-url" value="${escapeHtml(activeGroup.icon_url || '')}">
+          <div style="margin-top:8px;">
+            <button type="button" class="btn btn-quiet btn-sm" id="gs-clear-icon" ${activeGroup.icon_url ? '' : 'style="display:none;"'}>Remove icon</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="gs-join">Who can join?</label>
+          <select id="gs-join">
+            <option value="code" ${activeGroup.join_mode === 'code' ? 'selected' : ''}>Invite code only</option>
+            <option value="public" ${activeGroup.join_mode === 'public' ? 'selected' : ''}>Public — anyone can join</option>
+            <option value="invite" ${activeGroup.join_mode === 'invite' ? 'selected' : ''}>Invite-only</option>
+          </select>
+        </div>
+        <div class="error" id="gs-error" style="display:none;margin-bottom:10px;"></div>
+        <button type="submit" class="btn btn-primary btn-sm" id="gs-save">Save settings</button>
+      </form>
+      <section class="settings-section danger-zone" style="margin-top:28px;">
+        <h2 class="section-label" style="color:var(--red);">Danger zone</h2>
+        <p class="hint" style="margin-bottom:12px;">Deleting the group removes chat, members, and invite codes permanently.</p>
+        <button type="button" class="btn btn-danger btn-sm" id="gs-delete">Delete group</button>
+      </section>`;
+
+    let pendingIcon = activeGroup.icon_url || null;
+    let clearIcon = false;
+    const gsZone = document.getElementById('gs-icon-zone');
+    const gsInput = document.getElementById('gs-icon-input');
+    const gsPreview = document.getElementById('gs-icon-preview');
+    gsZone.addEventListener('click', () => gsInput.click());
+    gsInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      document.getElementById('gs-icon-label').textContent = 'Uploading…';
+      const url = await uploadGroupIcon(file);
+      if (url) {
+        pendingIcon = url;
+        clearIcon = false;
+        document.getElementById('gs-icon-url').value = url;
+        gsPreview.src = url;
+        gsPreview.style.display = 'block';
+        document.getElementById('gs-icon-label').textContent = 'Icon set — click to change';
+        document.getElementById('gs-clear-icon').style.display = '';
+        toast('Icon uploaded');
+      } else {
+        document.getElementById('gs-icon-label').textContent = activeGroup.icon_url ? 'Icon set — click to change' : '📷 Upload icon from device';
+      }
+      e.target.value = '';
+    });
+    document.getElementById('gs-clear-icon').addEventListener('click', () => {
+      pendingIcon = null;
+      clearIcon = true;
+      document.getElementById('gs-icon-url').value = '';
+      gsPreview.style.display = 'none';
+      gsPreview.removeAttribute('src');
+      document.getElementById('gs-icon-label').textContent = '📷 Upload icon from device';
+      document.getElementById('gs-clear-icon').style.display = 'none';
+    });
+
+    document.getElementById('group-settings-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('gs-error');
+      errEl.style.display = 'none';
+      const btn = document.getElementById('gs-save');
+      btn.disabled = true;
+      const { data, error } = await supabase.rpc('update_group_settings', {
+        p_group_id: activeGroup.id,
+        p_name: document.getElementById('gs-name').value.trim(),
+        p_description: document.getElementById('gs-desc').value.trim(),
+        p_icon_url: clearIcon ? null : (pendingIcon || null),
+        p_join_mode: document.getElementById('gs-join').value,
+        p_clear_icon: clearIcon
+      });
+      btn.disabled = false;
+      if (error) {
+        errEl.textContent = error.message;
+        errEl.style.display = 'block';
+        return;
+      }
+      activeGroup = data;
+      toast('Group settings saved');
+      await openGroupBySlug(activeGroup.slug);
+      // switch back to settings after reload
+      const settingsBtn = detailEl.querySelector('[data-tab="settings"]');
+      if (settingsBtn) {
+        detailEl.querySelectorAll('#group-tabs button').forEach(b => b.classList.remove('active'));
+        settingsBtn.classList.add('active');
+        await renderGroupTab('settings', true);
+      }
+    });
+
+    document.getElementById('gs-delete').addEventListener('click', async () => {
+      if (!confirm(`Delete group “${activeGroup.name}”? This cannot be undone.`)) return;
+      if (!confirm('Really delete this group and all its chat?')) return;
+      const { error } = await supabase.rpc('delete_group', { p_group_id: activeGroup.id });
+      if (error) toast(error.message, 'error');
+      else {
+        toast('Group deleted');
+        window.location.href = 'groups.html';
+      }
+    });
+    return;
+  }
+
+  if (tab === 'invites' && isOwner) {
+    el.innerHTML = `
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <button type="button" class="btn btn-primary btn-sm" id="gen-code-btn">Generate invite code</button>
+        <span class="hint">Share codes so people can join from Groups → Join.</span>
+      </div>
+      <div id="invite-list" style="margin-top:14px;"><div class="admin-empty">Loading…</div></div>`;
+
+    document.getElementById('gen-code-btn').addEventListener('click', async () => {
+      const { data, error } = await supabase.rpc('create_group_invite_code', {
+        p_group_id: activeGroup.id,
+        p_max_uses: null,
+        p_expires_hours: null
+      });
+      if (error) toast(error.message, 'error');
+      else { toast(`Code ${data.code} created`); loadInviteCodes(); }
+    });
+    await loadInviteCodes();
+  }
+}
+
+async function loadInviteCodes() {
+  const el = document.getElementById('invite-list');
+  if (!el) return;
+  const { data, error } = await supabase
+    .from('group_invite_codes')
+    .select('*')
+    .eq('group_id', activeGroup.id)
+    .order('created_at', { ascending: false });
+  if (error) { el.innerHTML = `<div class="admin-empty">${escapeHtml(error.message)}</div>`; return; }
+  if (!data?.length) { el.innerHTML = `<div class="admin-empty">No invite codes yet.</div>`; return; }
+  el.innerHTML = data.map(c => `
+    <div class="admin-row">
+      <div class="admin-row-main">
+        <div class="admin-id" style="font-size:16px;">${escapeHtml(c.code)}</div>
+        <div class="admin-meta">Uses: ${c.use_count}${c.max_uses != null ? ` / ${c.max_uses}` : ''}
+          ${c.expires_at ? ` · expires ${formatDate(c.expires_at)}` : ' · no expiry'}
+          · created ${formatDate(c.created_at)}</div>
+      </div>
+      <div class="admin-actions">
+        <button type="button" class="btn btn-quiet btn-sm" data-copy="${escapeHtml(c.code)}">Copy</button>
+        <button type="button" class="btn btn-danger btn-sm" data-del-code="${escapeHtml(c.id)}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+      toast('Code copied');
+    } catch (_) {
+      toast(btn.dataset.copy);
+    }
+  }));
+  el.querySelectorAll('[data-del-code]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this invite code?')) return;
+    const { error: err } = await supabase.from('group_invite_codes').delete().eq('id', btn.dataset.delCode);
+    if (err) toast(err.message, 'error');
+    else loadInviteCodes();
+  }));
+}
+
+async function loadMessages() {
+  const box = document.getElementById('chat-messages');
+  if (!box || !activeGroup) return;
+  const { data, error } = await supabase
+    .from('group_messages')
+    .select('id, content, created_at, user_id, users(username, display_name, avatar_url)')
+    .eq('group_id', activeGroup.id)
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (error) {
+    box.innerHTML = `<div class="admin-empty">${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  if (!data?.length) {
+    box.innerHTML = `<div class="admin-empty">No messages yet — say hello.</div>`;
+    return;
+  }
+  box.innerHTML = data.map(m => `
+    <div class="group-msg">
+      ${avatarHtml(m.users, 32)}
+      <div class="group-msg-body">
+        <span class="who">${escapeHtml(m.users?.display_name || m.users?.username || 'Member')}</span>
+        <span class="when">${timeAgo(m.created_at)}</span>
+        <div class="text">${escapeHtml(m.content)}</div>
+      </div>
+    </div>
+  `).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function subscribeMessages() {
+  unsubscribeChat();
+  if (!activeGroup) return;
+  messagesChannel = supabase
+    .channel(`group-chat-${activeGroup.id}`)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'group_messages',
+      filter: `group_id=eq.${activeGroup.id}`
+    }, () => { loadMessages(); })
+    .subscribe();
+}
+
+// Boot
+if (openSlug) {
+  await openGroupBySlug(openSlug);
+} else {
+  await loadMyGroups();
+}
+</script>
+</body>
+</html>

@@ -512,6 +512,14 @@ function writeIcon() {
   return `<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
 }
 
+function groupsIcon() {
+  return `<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+}
+
+function aiIcon() {
+  return `<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M5 19l.8 2.2L8 22l-2.2.8L5 25l-.8-2.2L2 22l2.2-.8L5 19z"/><path d="M19 14l.6 1.6L21 16l-1.4.6L19 18l-.6-1.4L17 16l1.4-.6L19 14z"/></svg>`;
+}
+
 function wireAccountMenu(btn, dd) {
   if (!btn || !dd) return;
   btn.addEventListener('click', (e) => {
@@ -553,6 +561,12 @@ function renderBottomNav(session, profile, activeLink) {
       <a href="index.html" class="bottom-tab ${activeLink === 'discover' ? 'active' : ''}">
         ${discoverIcon()}<span>Discover</span>
       </a>
+      <a href="auth.html" class="bottom-tab ${activeLink === 'groups' ? 'active' : ''}">
+        ${groupsIcon()}<span>Groups</span>
+      </a>
+      <a href="auth.html" class="bottom-tab ${activeLink === 'ai' ? 'active' : ''}">
+        ${aiIcon()}<span>AI</span>
+      </a>
       <a href="auth.html" class="bottom-tab bottom-tab-avatar">
         <span class="bottom-tab-avatar-ring"><span class="avatar" style="width:36px;height:36px;font-size:13px;">?</span></span>
         <span>Sign in</span>
@@ -566,6 +580,12 @@ function renderBottomNav(session, profile, activeLink) {
   bar.innerHTML = `
     <a href="index.html" class="bottom-tab ${activeLink === 'discover' ? 'active' : ''}">
       ${discoverIcon()}<span>Discover</span>
+    </a>
+    <a href="groups.html" class="bottom-tab ${activeLink === 'groups' ? 'active' : ''}">
+      ${groupsIcon()}<span>Groups</span>
+    </a>
+    <a href="VoyegerAI.html" class="bottom-tab ${activeLink === 'ai' ? 'active' : ''}">
+      ${aiIcon()}<span>AI</span>
     </a>
     <div class="bottom-tab bottom-tab-avatar header-user">
       <button type="button" class="bottom-tab-avatar-btn" id="user-menu-btn" title="Account" aria-haspopup="true" aria-expanded="false">

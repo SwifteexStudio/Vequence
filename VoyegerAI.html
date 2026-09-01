@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en" class="ai-page">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Voyeger AI — Vequence</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Locked page shell */
+html.ai-page, body.ai-page {
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body.ai-page {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding-bottom: 0 !important;
+}
+body.ai-page .site-header {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 60;
+  overflow: visible !important;
+}
+body.ai-page .site-header .shell {
+  height: auto;
+  min-height: 52px;
+  padding: 8px 0;
+  overflow: visible !important;
+  flex-wrap: nowrap;
+  gap: 10px;
+  min-width: 0;
+}
+body.ai-page .wordmark { flex-shrink: 0; }
+body.ai-page .header-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none !important;
+  overflow: visible !important;
+}
+body.ai-page .header-search input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+body.ai-page .header-nav {
+  flex-shrink: 0;
+  overflow: visible !important;
+}
+body.ai-page #site-footer { display: none !important; }
+body.ai-page .bottom-tab-bar {
+  flex-shrink: 0;
+  position: relative !important;
+  left: auto; right: auto; bottom: auto;
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 50;
+  overflow: visible !important;
+}
+body.ai-page .bottom-tab-bar .bottom-account-menu.header-dropdown {
+  z-index: 80;
+}
+
+.ai-app {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.ai-app-head {
+  flex-shrink: 0;
+  padding: 8px 2px 6px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper);
+}
+.ai-app-head .kicker {
+  margin: 0;
+  color: var(--evergreen);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.ai-app-head h1 {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.2;
+}
+.ai-app-head p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.ai-chat-locked {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-top: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px 12px 0 0;
+  border-bottom: none;
+  background: var(--paper-raised);
+}
+.ai-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 12px 12px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-bubble {
+  box-sizing: border-box;
+  padding: 11px 13px;
+  border-radius: 14px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  flex-shrink: 0;
+}
+.ai-bubble.user {
+  align-self: flex-end;
+  max-width: min(92%, 560px);
+  background: var(--evergreen);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
+}
+.ai-bubble.assistant {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-bottom-left-radius: 4px;
+  white-space: normal;
+}
+.ai-bubble.assistant .ai-md {
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  overflow: visible;
+  max-height: none;
+}
+.ai-bubble.assistant .ai-md > *:first-child { margin-top: 0; }
+.ai-bubble.assistant .ai-md > *:last-child { margin-bottom: 0; }
+.ai-bubble.assistant .ai-md p { margin: 0 0 0.75em; }
+.ai-bubble.assistant .ai-md p:last-child { margin-bottom: 0; }
+.ai-bubble.assistant .ai-md h2,
+.ai-bubble.assistant .ai-md h3 {
+  font-family: var(--font-display);
+  font-size: 1.05em;
+  margin: 0.8em 0 0.4em;
+}
+.ai-bubble.assistant .ai-md ul,
+.ai-bubble.assistant .ai-md ol {
+  margin: 0.4em 0 0.75em;
+  padding-left: 1.35em;
+}
+.ai-bubble.assistant .ai-md li { margin: 0.25em 0; }
+.ai-bubble.assistant .ai-md code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--paper-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.ai-bubble.assistant .ai-md pre {
+  margin: 0.55em 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  max-width: 100%;
+  background: var(--ink);
+  color: #E8EAE4;
+  font-size: 12.5px;
+}
+.ai-bubble.assistant .ai-md pre code {
+  background: none; border: none; padding: 0; color: inherit;
+}
+.ai-bubble.assistant .ai-md a { color: var(--evergreen-dark); text-decoration: underline; }
+.ai-bubble.assistant .ai-md blockquote {
+  margin: 0.5em 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--gold);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.ai-bubble.assistant .ai-md strong { font-weight: 700; }
+
+.ai-bubble.system {
+  align-self: center;
+  background: transparent;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 4px 6px;
+}
+
+/* Typing animation */
+.ai-bubble.typing {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-bottom-left-radius: 4px;
+  min-height: 44px;
+}
+.ai-typing-label {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+.ai-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 14px;
+}
+.ai-typing-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--evergreen);
+  opacity: 0.35;
+  animation: ai-dot 1.15s ease-in-out infinite;
+}
+.ai-typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.ai-typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes ai-dot {
+  0%, 80%, 100% { opacity: 0.28; transform: translateY(0) scale(0.88); }
+  40% { opacity: 1; transform: translateY(-4px) scale(1.08); }
+}
+.ai-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--evergreen);
+  animation: ai-blink 0.85s step-end infinite;
+}
+@keyframes ai-blink { 50% { opacity: 0; } }
+
+.ai-sources {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+}
+.ai-sources a {
+  color: var(--evergreen-dark);
+  font-weight: 600;
+  display: block;
+  margin-top: 4px;
+  white-space: normal;
+}
+
+.ai-form-locked {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 8px 8px 10px;
+  border-top: 1px solid var(--hairline);
+  background: var(--paper-raised);
+}
+.ai-form-locked textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  max-height: 88px;
+  resize: none;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 9px 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.4;
+  overflow-y: auto;
+}
+.ai-form-locked textarea:focus {
+  outline: none;
+  border-color: var(--evergreen);
+}
+.ai-form-locked .btn {
+  flex-shrink: 0;
+  height: 40px;
+  min-width: 60px;
+}
+
+@media (max-width: 720px) {
+  body.ai-page .site-header .shell {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  body.ai-page .header-search {
+    flex-basis: 100%;
+    order: 3;
+    max-width: none !important;
+  }
+}
+</style>
+</head>
+<body class="ai-page">
+<header id="site-header"></header>
+
+<div class="ai-app">
+  <div class="ai-app-head">
+    <div class="kicker">Voyeger AI</div>
+    <h1>Research assistant</h1>
+    <p>Streams full answers · uses Vequence articles when relevant</p>
+  </div>
+
+  <div class="ai-chat-locked">
+    <div class="ai-messages" id="ai-messages">
+      <div class="ai-bubble system">Ask about Vequence research or anything else.</div>
+    </div>
+    <form class="ai-form-locked" id="ai-form">
+      <textarea id="ai-input" rows="1" placeholder="Ask Voyeger…" maxlength="2000" enterkeyhint="send"></textarea>
+      <button type="submit" class="btn btn-primary btn-sm" id="ai-send">Ask</button>
+    </form>
+  </div>
+</div>
+
+<footer id="site-footer"></footer>
+
+<script type="module">
+import {
+  supabase, requireAuth, initHeader, initFooter, escapeHtml, toast, renderMarkdown
+} from './app.js';
+
+const GEMINI_API_KEY = 'AQ.Ab8RN6ICqTSoXSpJEJ8qJV2wCvuuKpichstN8qryO3EORwNBcg';
+const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash'];
+
+const session = await requireAuth('auth.html');
+if (!session) throw new Error('redirect');
+await initHeader('ai');
+initFooter();
+
+const messagesEl = document.getElementById('ai-messages');
+const form = document.getElementById('ai-form');
+const input = document.getElementById('ai-input');
+const sendBtn = document.getElementById('ai-send');
+
+const history = [];
+let busy = false;
+
+function scrollMessagesToEnd() {
+  requestAnimationFrame(() => {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  });
+}
+
+function appendUser(text) {
+  const div = document.createElement('div');
+  div.className = 'ai-bubble user';
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  scrollMessagesToEnd();
+}
+
+function createAssistantBubble() {
+  const div = document.createElement('div');
+  div.className = 'ai-bubble assistant';
+  const md = document.createElement('div');
+  md.className = 'ai-md';
+  div.appendChild(md);
+  messagesEl.appendChild(div);
+  scrollMessagesToEnd();
+  return { root: div, md };
+}
+
+function setAssistantMarkdown(mdEl, text, showCursor = false) {
+  const html = renderMarkdown(text) || `<p>${escapeHtml(text)}</p>`;
+  mdEl.innerHTML = html + (showCursor ? '<span class="ai-cursor" aria-hidden="true"></span>' : '');
+  scrollMessagesToEnd();
+}
+
+function attachSources(root, sources) {
+  if (!sources?.length) return;
+  root.querySelectorAll('.ai-sources').forEach(n => n.remove());
+  const box = document.createElement('div');
+  box.className = 'ai-sources';
+  box.innerHTML = '<strong>Sources</strong>' + sources.map(s =>
+    `<a href="article.html?slug=${encodeURIComponent(s.slug)}">${escapeHtml(s.title)}</a>`
+  ).join('');
+  root.appendChild(box);
+  scrollMessagesToEnd();
+}
+
+function setTyping(on, label = 'Voyeger is typing') {
+  let el = document.getElementById('ai-typing');
+  if (on) {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ai-typing';
+      el.className = 'ai-bubble typing';
+      el.setAttribute('aria-live', 'polite');
+      el.innerHTML = `
+        <div class="ai-typing-dots" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <span class="ai-typing-label">${escapeHtml(label)}</span>`;
+      messagesEl.appendChild(el);
+    } else {
+      const lab = el.querySelector('.ai-typing-label');
+      if (lab) lab.textContent = label;
+    }
+  } else if (el) {
+    el.remove();
+  }
+  scrollMessagesToEnd();
+}
+
+async function searchVequenceArticles(query) {
+  const q = String(query || '').trim();
+  if (q.length < 2) return [];
+
+  const { data, error } = await supabase
+    .from('articles')
+    .select('title, subtitle, slug, category, content, users(username, display_name)')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+    .limit(40);
+
+  if (error || !data?.length) return [];
+
+  const terms = q.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+  const scored = [];
+  for (const a of data) {
+    const md = (a.content?.markdown || a.content?.body || '').slice(0, 2200);
+    const title = a.title || '';
+    const blob = `${title}\n${a.subtitle || ''}\n${a.category || ''}\n${md}`.toLowerCase();
+    let score = 0;
+    for (const t of terms) {
+      if (title.toLowerCase().includes(t)) score += 5;
+      else if (blob.includes(t)) score += 2;
+    }
+    if (q.length > 4 && blob.includes(q.toLowerCase())) score += 6;
+    if (score > 0) scored.push({ a, score, md });
+  }
+  scored.sort((x, y) => y.score - x.score);
+  const picks = scored.length
+    ? scored.slice(0, 5)
+    : data.slice(0, 3).map(a => ({
+        a,
+        md: (a.content?.markdown || a.content?.body || '').slice(0, 2200)
+      }));
+
+  return picks.map(({ a, md }) => ({
+    title: a.title,
+    slug: a.slug,
+    category: a.category || '',
+    author: a.users?.display_name || a.users?.username || '',
+    excerpt: String(md || '')
+      .replace(/[#>*`\[\]]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 520)
+  }));
+}
+
+function buildContextBlock(articles) {
+  if (!articles.length) return 'No Vequence article matches.';
+  return articles.map((a, i) =>
+    `[${i + 1}] ${a.title} (${a.category}) by ${a.author}\n${a.excerpt}`
+  ).join('\n\n');
+}
+
+function buildRequestBody(userText, articles) {
+  const system = `You are Voyeger AI for Vequence.
+Always finish your answer completely — never stop mid-sentence or mid-list.
+Use markdown (paragraphs, **bold**, lists) for clarity.
+Use the article CONTEXT when relevant and cite titles. If nothing matches, say so briefly, then answer fully from general knowledge.
+
+CONTEXT:
+${buildContextBlock(articles)}`;
+
+  const trimmed = history.slice(-6);
+  return {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [
+      ...trimmed.map(h => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: h.text }]
+      })),
+      { role: 'user', parts: [{ text: userText }] }
+    ],
+    generationConfig: {
+      temperature: 0.4,
+      maxOutputTokens: 4096,
+      topP: 0.9
+    }
+  };
+}
+
+/** Extract text pieces from one Gemini stream JSON object */
+function extractTextFromChunk(json) {
+  const parts = json?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+  return parts.map(p => p.text).filter(Boolean).join('');
+}
+
+/**
+ * Robust stream reader:
+ * - Handles SSE (data: {...})
+ * - Handles concatenated / multi-line JSON
+ * - Flushes trailing buffer at end
+ */
+async function readGeminiStream(res, onChunk) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full = '';
+
+  const consumePayload = (payload) => {
+    const raw = payload.trim();
+    if (!raw || raw === '[DONE]') return;
+    try {
+      const json = JSON.parse(raw);
+      const piece = extractTextFromChunk(json);
+      if (piece) {
+        full += piece;
+        onChunk(full);
+      }
+    } catch (_) {
+      // try array form
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          for (const item of arr) {
+            const piece = extractTextFromChunk(item);
+            if (piece) {
+              full += piece;
+              onChunk(full);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Prefer SSE line parsing
+    if (buffer.includes('data:')) {
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const t = line.trim();
+        if (t.startsWith('data:')) consumePayload(t.slice(5));
+      }
+    } else {
+      // Non-SSE: try to split complete JSON objects by newlines
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.trim()) consumePayload(line);
+      }
+    }
+  }
+
+  // Flush remainder
+  if (buffer.trim()) {
+    if (buffer.trim().startsWith('data:')) consumePayload(buffer.trim().slice(5));
+    else consumePayload(buffer);
+  }
+
+  return full.trim();
+}
+
+async function streamGemini(userText, articles, onChunk) {
+  const body = buildRequestBody(userText, articles);
+  let lastErr = null;
+
+  for (const model of GEMINI_MODELS) {
+    // SSE stream
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(GEMINI_API_KEY)}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        lastErr = errBody?.error?.message || `HTTP ${res.status}`;
+        continue;
+      }
+      if (!res.body) {
+        lastErr = 'No stream body';
+        continue;
+      }
+      const full = await readGeminiStream(res, onChunk);
+      if (full) return full;
+      lastErr = 'Empty stream';
+    } catch (e) {
+      lastErr = e.message || String(e);
+    }
+  }
+
+  // Non-stream fallback (full response — avoids truncated stream parses)
+  for (const model of GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        lastErr = data?.error?.message || `HTTP ${res.status}`;
+        continue;
+      }
+      const text = extractTextFromChunk(data).trim();
+      if (text) {
+        onChunk(text);
+        return text;
+      }
+      // finish reason diagnostic
+      const reason = data?.candidates?.[0]?.finishReason;
+      lastErr = reason ? `Empty response (${reason})` : 'Empty response';
+    } catch (e) {
+      lastErr = e.message || String(e);
+    }
+  }
+  throw new Error(lastErr || 'Gemini request failed');
+}
+
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 88) + 'px';
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (busy) return;
+  const text = input.value.trim();
+  if (!text) return;
+
+  busy = true;
+  input.value = '';
+  input.style.height = 'auto';
+  sendBtn.disabled = true;
+  appendUser(text);
+  history.push({ role: 'user', text });
+
+  setTyping(true, 'Searching Vequence');
+
+  try {
+    const articles = await searchVequenceArticles(text);
+    setTyping(true, 'Voyeger is typing');
+
+    let bubble = null;
+    let firstToken = true;
+
+    const answer = await streamGemini(text, articles, (partial) => {
+      if (firstToken) {
+        setTyping(false);
+        bubble = createAssistantBubble();
+        firstToken = false;
+      }
+      setAssistantMarkdown(bubble.md, partial, true);
+    });
+
+    setTyping(false);
+    if (!bubble) {
+      bubble = createAssistantBubble();
+    }
+    setAssistantMarkdown(bubble.md, answer, false);
+    history.push({ role: 'model', text: answer });
+
+    const used = articles.filter(a =>
+      a.title && answer.toLowerCase().includes(a.title.toLowerCase().slice(0, 18))
+    ).slice(0, 5).map(a => ({ title: a.title, slug: a.slug }));
+    attachSources(bubble.root, used);
+  } catch (err) {
+    setTyping(false);
+    const { md } = createAssistantBubble();
+    setAssistantMarkdown(md, `Could not answer (${err.message || 'error'}). Try again.`);
+    toast(err.message || 'AI request failed', 'error');
+  } finally {
+    busy = false;
+    sendBtn.disabled = false;
+    input.focus();
+    scrollMessagesToEnd();
+  }
+});
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    form.requestSubmit();
+  }
+});
+
+window.addEventListener('resize', scrollMessagesToEnd);
+setTimeout(() => input.focus(), 200);
+</script>
+</body>
+</html>
