@@ -5,7 +5,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export const SUPABASE_URL = 'https://oezsicxbgrkeytlshodi.supabase.co';
-export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lenNpY3hiZ3JrZXl0bHNob2RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDk0NDIsImV4cCI6MjEwMzY4NTQ0Mn0.NigZre0SWOczfQfRjMAOV_6HHLa-lJIcdgB-jjlDdJk';
+export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzIiwicmVmIjoi...';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -419,16 +419,19 @@ export async function ensureProfile(session) {
     .select('id')
     .eq('username', username)
     .maybeSingle();
+
   if (taken && taken.id !== user.id) {
     username = username.slice(0, 20) + '_' + user.id.replace(/-/g, '').slice(0, 6);
   }
 
   let display_name = metaDisplay;
+
   if (!display_name || display_name === 'User') {
     display_name = username.startsWith('user_') ? (user.email || 'Member') : username;
   }
 
   const payload = { id: user.id, username, display_name };
+
   if (existing?.avatar_url) payload.avatar_url = existing.avatar_url;
   if (existing?.bio) payload.bio = existing.bio;
 
@@ -440,7 +443,13 @@ export async function ensureProfile(session) {
 
   if (error) {
     console.warn('ensureProfile failed:', error.message);
-    currentProfile = existing || { id: user.id, username, display_name, avatar_url: null, bio: null };
+    currentProfile = existing || {
+      id: user.id,
+      username,
+      display_name,
+      avatar_url: null,
+      bio: null
+    };
     return currentProfile;
   }
 
@@ -448,55 +457,79 @@ export async function ensureProfile(session) {
   return saved;
 }
 
-
 export function adminBadgeHtml(profile) {
-  return profile?.is_admin ? '<span class="admin-badge" title="Vequence administrator">ADMIN</span>' : '';
+  return profile?.is_admin
+    ? '<span class="admin-badge" title="Vequence administrator">ADMIN</span>'
+    : '';
 }
 
 export async function getCurrentProfile() {
   const session = await getSession();
+
   if (!session) {
     currentProfile = null;
     return null;
   }
-  if (currentProfile && currentProfile.id === session.user.id) return currentProfile;
+
+  if (currentProfile && currentProfile.id === session.user.id) {
+    return currentProfile;
+  }
+
   return await ensureProfile(session);
 }
 
 export async function isAdmin() {
   const session = await getSession();
+
   if (!session) return false;
+
   const { data, error } = await supabase.rpc('is_admin');
+
   return !error && data === true;
 }
 
 export async function requireAdmin(redirectTo = 'auth.html') {
   const session = await requireAuth(redirectTo);
+
   if (!session) return null;
+
   const admin = await isAdmin();
+
   if (!admin) {
     window.location.replace('index.html');
     return null;
   }
+
   return session;
 }
 
 export async function requireAuth(redirectTo = 'auth.html') {
   const session = await getSession();
+
   if (!session) {
     // Use replace so the login page does not leave a back-stack entry to a gated page
-    const here = (window.location.pathname.split('/').pop() || 'index.html') + (window.location.search || '') + (window.location.hash || '');
-    window.location.replace(`${redirectTo}?next=${encodeURIComponent(here)}`);
+    const here =
+      (window.location.pathname.split('/').pop() || 'index.html') +
+      (window.location.search || '') +
+      (window.location.hash || '');
+
+    window.location.replace(
+      `${redirectTo}?next=${encodeURIComponent(here)}`
+    );
+
     return null;
   }
+
   await ensureProfile(session);
   return session;
 }
 
 export async function signOut() {
   await supabase.auth.signOut();
+
   currentSession = null;
   currentProfile = null;
+
   window.location.replace('index.html');
 }
 
@@ -522,15 +555,23 @@ function aiIcon() {
 
 function wireAccountMenu(btn, dd) {
   if (!btn || !dd) return;
+
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
+
     const open = dd.classList.toggle('open');
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+
+    btn.setAttribute(
+      'aria-expanded',
+      open ? 'true' : 'false'
+    );
   });
+
   document.addEventListener('click', () => {
     dd.classList.remove('open');
     btn.setAttribute('aria-expanded', 'false');
   });
+
   dd.addEventListener('click', (e) => e.stopPropagation());
 }
 
@@ -547,6 +588,7 @@ function accountMenuHtml(profile) {
 
 function renderBottomNav(session, profile, activeLink) {
   let bar = document.getElementById('bottom-tab-bar');
+
   if (!bar) {
     bar = document.createElement('nav');
     bar.id = 'bottom-tab-bar';
@@ -554,6 +596,7 @@ function renderBottomNav(session, profile, activeLink) {
     bar.setAttribute('aria-label', 'Primary');
     document.body.appendChild(bar);
   }
+
   document.body.classList.add('has-bottom-tabs');
 
   if (!session) {
@@ -561,16 +604,22 @@ function renderBottomNav(session, profile, activeLink) {
       <a href="index.html" class="bottom-tab ${activeLink === 'discover' ? 'active' : ''}">
         ${discoverIcon()}<span>Discover</span>
       </a>
+
       <a href="auth.html" class="bottom-tab ${activeLink === 'groups' ? 'active' : ''}">
         ${groupsIcon()}<span>Groups</span>
       </a>
+
       <a href="auth.html" class="bottom-tab ${activeLink === 'ai' ? 'active' : ''}">
         ${aiIcon()}<span>AI</span>
       </a>
+
       <a href="auth.html" class="bottom-tab bottom-tab-avatar">
-        <span class="bottom-tab-avatar-ring"><span class="avatar" style="width:36px;height:36px;font-size:13px;">?</span></span>
+        <span class="bottom-tab-avatar-ring">
+          <span class="avatar" style="width:36px;height:36px;font-size:13px;">?</span>
+        </span>
         <span>Sign in</span>
       </a>
+
       <a href="auth.html" class="bottom-tab">
         ${writeIcon()}<span>Write</span>
       </a>`;
@@ -581,35 +630,54 @@ function renderBottomNav(session, profile, activeLink) {
     <a href="index.html" class="bottom-tab ${activeLink === 'discover' ? 'active' : ''}">
       ${discoverIcon()}<span>Discover</span>
     </a>
+
     <a href="groups.html" class="bottom-tab ${activeLink === 'groups' ? 'active' : ''}">
       ${groupsIcon()}<span>Groups</span>
     </a>
+
     <a href="VoyegerAI.html" class="bottom-tab ${activeLink === 'ai' ? 'active' : ''}">
       ${aiIcon()}<span>AI</span>
     </a>
+
     <div class="bottom-tab bottom-tab-avatar header-user">
-      <button type="button" class="bottom-tab-avatar-btn" id="user-menu-btn" title="Account" aria-haspopup="true" aria-expanded="false">
+      <button
+        type="button"
+        class="bottom-tab-avatar-btn"
+        id="user-menu-btn"
+        title="Account"
+        aria-haspopup="true"
+        aria-expanded="false"
+      >
         <span class="bottom-tab-avatar-ring ${activeLink === 'profile' || activeLink === 'settings' ? 'active' : ''}">
           ${avatarHtml(profile, 36)}
         </span>
         <span>You</span>
       </button>
+
       ${accountMenuHtml(profile)}
     </div>
+
     <a href="editor.html" class="bottom-tab ${activeLink === 'write' ? 'active' : ''}">
       ${writeIcon()}<span>Write</span>
     </a>`;
 
   const btn = document.getElementById('user-menu-btn');
   const dd = document.getElementById('user-dropdown');
+
   wireAccountMenu(btn, dd);
+
   const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) logoutBtn.addEventListener('click', signOut);
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', signOut);
+  }
 }
 
 export async function initHeader(activeLink) {
   const mount = document.getElementById('site-header');
+
   if (!mount) return;
+
   mount.classList.add('site-header');
 
   const session = await getSession();
@@ -619,13 +687,26 @@ export async function initHeader(activeLink) {
   mount.innerHTML = `
     <div class="shell">
       <a href="index.html" class="wordmark">Ve<span>quence</span></a>
+
       <form class="header-search" action="index.html" method="get">
-        <input type="text" name="q" placeholder="Search articles and people" value="${escapeHtml(qs('q') || '')}">
+        <input
+          type="text"
+          name="q"
+          placeholder="Search articles and people"
+          value="${escapeHtml(qs('q') || '')}"
+        >
       </form>
+
       <nav class="header-nav header-nav-compact">
-        ${session
-          ? (profile?.is_admin ? `<a href="admin.html" class="nav-link">Admin</a>` : '')
-          : `<a href="auth.html" class="btn btn-outline btn-sm">Sign in</a>`}
+        ${
+          session
+            ? (
+                profile?.is_admin
+                  ? `<a href="admin.html" class="nav-link">Admin</a>`
+                  : ''
+              )
+            : `<a href="auth.html" class="btn btn-outline btn-sm">Sign in</a>`
+        }
       </nav>
     </div>
   `;
@@ -637,7 +718,9 @@ export async function initHeader(activeLink) {
 
 export function initFooter() {
   const mount = document.getElementById('site-footer');
+
   if (!mount) return;
+
   mount.innerHTML = `
     <div class="shell site-footer">
       <span>© 2026 Vequence. All rights reserved.</span>
@@ -663,6 +746,7 @@ function sampleForLanguageDetect(text) {
     .replace(/[#>*_\-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
   return cleaned.slice(0, 400);
 }
 
@@ -672,36 +756,52 @@ function sampleForLanguageDetect(text) {
  */
 export async function detectLanguage(text) {
   const sample = sampleForLanguageDetect(text);
+
   if (!sample || sample.length < 12) return 'en';
 
   const cjk = (sample.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length;
   const cyr = (sample.match(/[\u0400-\u04FF]/g) || []).length;
   const arab = (sample.match(/[\u0600-\u06FF]/g) || []).length;
   const letters = (sample.match(/\p{L}/gu) || []).length || 1;
+
   if (cjk / letters > 0.25) return 'zh';
   if (cyr / letters > 0.25) return 'ru';
   if (arab / letters > 0.25) return 'ar';
 
   try {
-    const url = TRANSLATE_ENDPOINT + '?q=' + encodeURIComponent(sample) + '&langpair=aut|en';
+    const url =
+      TRANSLATE_ENDPOINT +
+      '?q=' +
+      encodeURIComponent(sample) +
+      '&langpair=aut|en';
+
     const res = await fetch(url);
+
     if (!res.ok) return 'en';
+
     const data = await res.json();
+
     let detected =
       (data && data.responseData && data.responseData.detectedLanguage) ||
       (data && data.matches && data.matches[0] && data.matches[0].source) ||
       null;
-    // Some responses nest differently
-    if (!detected && data && data.responseData && typeof data.responseData.translatedText === 'string') {
-      // If aut|en and text barely changed + high match, treat as English later
-    }
+
     let code = String(detected || '').toLowerCase().split(/[-_]/)[0];
+
     if (!/^[a-z]{2,3}$/.test(code)) {
-      // Fallback: if translation is nearly identical, assume English
-      const translated = (data && data.responseData && data.responseData.translatedText) || '';
-      if (translated && translated.trim().toLowerCase() === sample.trim().toLowerCase()) return 'en';
+      const translated =
+        (data && data.responseData && data.responseData.translatedText) || '';
+
+      if (
+        translated &&
+        translated.trim().toLowerCase() === sample.trim().toLowerCase()
+      ) {
+        return 'en';
+      }
+
       code = 'en';
     }
+
     return code;
   } catch (_) {
     return 'en';
@@ -710,17 +810,32 @@ export async function detectLanguage(text) {
 
 async function translatePlainChunk(text, sourceLang) {
   const q = String(text || '');
+
   if (!q.trim()) return q;
+
   try {
     const url =
       TRANSLATE_ENDPOINT +
-      '?q=' + encodeURIComponent(q.slice(0, 450)) +
-      '&langpair=' + encodeURIComponent(sourceLang + '|en');
+      '?q=' +
+      encodeURIComponent(q.slice(0, 450)) +
+      '&langpair=' +
+      encodeURIComponent(sourceLang + '|en');
+
     const res = await fetch(url);
+
     if (!res.ok) return q;
+
     const data = await res.json();
-    const out = data && data.responseData && data.responseData.translatedText;
-    if (!out || /INVALID SOURCE LANGUAGE|QUERY LENGTH LIMIT/i.test(out)) return q;
+
+    const out =
+      data &&
+      data.responseData &&
+      data.responseData.translatedText;
+
+    if (!out || /INVALID SOURCE LANGUAGE|QUERY LENGTH LIMIT/i.test(out)) {
+      return q;
+    }
+
     return out;
   } catch (_) {
     return q;
@@ -730,25 +845,39 @@ async function translatePlainChunk(text, sourceLang) {
 /** Split long plain text into ~400 char chunks on whitespace/sentence boundaries. */
 function chunkText(text, maxLen = 400) {
   const s = String(text || '');
+
   if (s.length <= maxLen) return [s];
+
   const parts = [];
   let rest = s;
+
   while (rest.length > maxLen) {
     let cut = rest.lastIndexOf(' ', maxLen);
+
     if (cut < maxLen * 0.5) cut = maxLen;
+
     parts.push(rest.slice(0, cut));
     rest = rest.slice(cut).trimStart();
   }
+
   if (rest) parts.push(rest);
+
   return parts;
 }
 
 export async function translateTextToEnglish(text, sourceLang = 'aut') {
   const chunks = chunkText(text, 400);
   const out = [];
+
   for (const c of chunks) {
-    out.push(await translatePlainChunk(c, sourceLang === 'en' ? 'aut' : sourceLang));
+    out.push(
+      await translatePlainChunk(
+        c,
+        sourceLang === 'en' ? 'aut' : sourceLang
+      )
+    );
   }
+
   return out.join(' ');
 }
 
@@ -758,41 +887,68 @@ export async function translateTextToEnglish(text, sourceLang = 'aut') {
  */
 export async function translateMarkdownToEnglish(markdown, sourceLang = 'aut') {
   const src = String(markdown || '');
+
   if (!src.trim()) return src;
 
   const parts = [];
   const re = /```[\s\S]*?```/g;
+
   let last = 0;
   let m;
+
   while ((m = re.exec(src)) !== null) {
-    if (m.index > last) parts.push({ type: 'text', value: src.slice(last, m.index) });
-    parts.push({ type: 'code', value: m[0] });
+    if (m.index > last) {
+      parts.push({
+        type: 'text',
+        value: src.slice(last, m.index)
+      });
+    }
+
+    parts.push({
+      type: 'code',
+      value: m[0]
+    });
+
     last = m.index + m[0].length;
   }
-  if (last < src.length) parts.push({ type: 'text', value: src.slice(last) });
+
+  if (last < src.length) {
+    parts.push({
+      type: 'text',
+      value: src.slice(last)
+    });
+  }
 
   const out = [];
+
   for (const p of parts) {
     if (p.type === 'code') {
       out.push(p.value);
       continue;
     }
-    // Translate paragraph-ish slices to keep structure
+
     const blocks = p.value.split(/(\n{2,})/);
+
     for (const block of blocks) {
       if (/^\n+$/.test(block) || !block.trim()) {
         out.push(block);
         continue;
       }
-      // Keep pure markdown-only lines (hr, empty headings) as-is
+
       if (/^\s*(---+|\*\s*\*\s*\*)\s*$/.test(block)) {
         out.push(block);
         continue;
       }
-      const translated = await translateTextToEnglish(block, sourceLang);
+
+      const translated = await translateTextToEnglish(
+        block,
+        sourceLang
+      );
+
       out.push(translated);
     }
   }
+
   return out.join('');
 }
 
@@ -801,9 +957,18 @@ export async function translateMarkdownToEnglish(markdown, sourceLang = 'aut') {
  * Returns { title, subtitle, markdown, evidenceSummary, translated, sourceLang }.
  * Fail-open: on errors, returns originals with translated:false.
  */
-export async function ensureEnglishArticle({ title, subtitle, markdown, evidenceSummary }) {
-  const probe = [title, subtitle, markdown].filter(Boolean).join('\n\n');
+export async function ensureEnglishArticle({
+  title,
+  subtitle,
+  markdown,
+  evidenceSummary
+}) {
+  const probe = [title, subtitle, markdown]
+    .filter(Boolean)
+    .join('\n\n');
+
   let sourceLang = 'en';
+
   try {
     sourceLang = await detectLanguage(probe);
   } catch (_) {
@@ -811,16 +976,35 @@ export async function ensureEnglishArticle({ title, subtitle, markdown, evidence
   }
 
   if (!sourceLang || sourceLang === 'en') {
-    return { title, subtitle, markdown, evidenceSummary, translated: false, sourceLang: 'en' };
+    return {
+      title,
+      subtitle,
+      markdown,
+      evidenceSummary,
+      translated: false,
+      sourceLang: 'en'
+    };
   }
 
   try {
     const [tTitle, tSub, tMd, tEv] = await Promise.all([
-      title ? translateTextToEnglish(title, sourceLang) : Promise.resolve(title),
-      subtitle ? translateTextToEnglish(subtitle, sourceLang) : Promise.resolve(subtitle),
-      markdown ? translateMarkdownToEnglish(markdown, sourceLang) : Promise.resolve(markdown),
-      evidenceSummary ? translateTextToEnglish(evidenceSummary, sourceLang) : Promise.resolve(evidenceSummary)
+      title
+        ? translateTextToEnglish(title, sourceLang)
+        : Promise.resolve(title),
+
+      subtitle
+        ? translateTextToEnglish(subtitle, sourceLang)
+        : Promise.resolve(subtitle),
+
+      markdown
+        ? translateMarkdownToEnglish(markdown, sourceLang)
+        : Promise.resolve(markdown),
+
+      evidenceSummary
+        ? translateTextToEnglish(evidenceSummary, sourceLang)
+        : Promise.resolve(evidenceSummary)
     ]);
+
     return {
       title: tTitle || title,
       subtitle: tSub || subtitle,
@@ -830,11 +1014,43 @@ export async function ensureEnglishArticle({ title, subtitle, markdown, evidence
       sourceLang
     };
   } catch (_) {
-    return { title, subtitle, markdown, evidenceSummary, translated: false, sourceLang };
+    return {
+      title,
+      subtitle,
+      markdown,
+      evidenceSummary,
+      translated: false,
+      sourceLang
+    };
   }
 }
 
 export const INTEREST_TOPICS = [
-  'Neuroscience', 'Technology', 'Health', 'Economics',
-  'Physics', 'Psychology', 'Climate', 'AI & ML'
+  'Neuroscience',
+  'Technology',
+  'Health',
+  'Economics',
+  'Physics',
+  'Psychology',
+  'Climate',
+  'AI & ML'
 ];
+
+// ============================================================
+// VEQUENCE — PWA SERVICE WORKER REGISTRATION
+// ============================================================
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js")
+      .then(() => {
+        console.log("Vequence PWA service worker registered.");
+      })
+      .catch((error) => {
+        console.error(
+          "Vequence service worker registration failed:",
+          error
+        );
+      });
+  });
+}
